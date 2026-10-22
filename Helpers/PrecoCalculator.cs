@@ -1,6 +1,6 @@
 using PrecificacaoPoc.Domain;
 
-namespace PrecificacaoPoc.Services;
+namespace PrecificacaoPoc.Helpers;
 
 /// <summary>
 /// Cálculos puros (sem I/O) migrados dos CROSS APPLY (VALUES ...) da procedure sp_CsmPrecoAtlzBoletim.
@@ -23,13 +23,13 @@ public static class PrecoCalculator
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Substituição do CROSS APPLY flags(FL_ARREDONDA)
     // Arredonda somente quando NÃO é Profimetrics, NÃO é Demandtec e o processo gerador <> 'MANUAL'.
     public static bool DeveArredondar(BoletimCabecalho cab) =>
-        !cab.Profimetrics && !cab.Demandtec && cab.ProcessoGeradorNormalizado != "MANUAL";
+        cab.Profimetrics == false && cab.Demandtec == false && cab.ProcessoGeradorNormalizado != "MANUAL";
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Substituição do cálculo inline do Preço 9 (+5% ou PMC) para método C#
     // Equivale a CONVERT(NUMERIC(12,2), ROUND(<CASE>, 2, 2)) -> o 3º argumento "2" do ROUND SQL TRUNCA (não arredonda).
     public static decimal? CalcularPreco9(ItemBoletim i)
     {
-        if (!i.TemPrecoVenda) return null;
+        if (i.PrcVenda is <= 0) return null;
 
         decimal venda = ArredondarNumeric(i.PrcVenda!.Value, 2);       // normalizado.BOPD_VL_PRCVENDA NUMERIC(12,2)
         decimal pmc = i.PfPrcMaxCons ?? 0m;                            // ISNULL(PRFI_VL_PRCMAXCONS, 0)

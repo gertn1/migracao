@@ -1,6 +1,7 @@
 using System.Data;
 using PrecificacaoPoc.Domain;
-using PrecificacaoPoc.Infrastructure;
+using PrecificacaoPoc.Helpers;
+using PrecificacaoPoc.Interfaces;
 
 namespace PrecificacaoPoc.Services;
 
@@ -47,7 +48,6 @@ public class BoletimPrecoService(
 
 
 
-
     private async Task<RetornoProcessamento> ExecutarFluxoAsync(
         IDbConnection conn, IDbTransaction? txSim, ProcessarBoletimRequest req, ResultadoProcessamento resultado)
     {
@@ -70,17 +70,30 @@ public class BoletimPrecoService(
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 3]: Materialização dos itens + cálculos inline (substitui CURSOR + #BoletimCalc)
         var itens = await repo.ObterItensAsync(conn, txSim, req.FilialId, req.BoletimId);
         resultado.TotalItensLidos = itens.Count;
-        if (itens.Count == 0) return RetornoProcessamento.Sucesso; // "IF NOT EXISTS (SELECT 1 FROM #BoletimCalc)" -> retorno 0
+        if (itens.Count == 0) return RetornoProcessamento.Sucesso;
 
-        var agora = DateTime.Now; // GETDATE() único para toda a execução
+        // Verifica se BoletimProfimetrics é iagual a 'N'"e @regBOPC_NM_PROCESSGER =/= 'MANUAL' (ou seja, se deve arredondar ou não)
+        var agora = DateTime.Now; 
         bool arredonda = PrecoCalculator.DeveArredondar(cab);
+
 
         var calculados = itens.Select(i => Calcular(i, tipoCusto, arredonda, req.FilialId)).ToList();
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 4]: Aplicação em PRODUTO_FILIAL (transação explícita)
-        var pares = calculados
-            .Select(c => (Calc: c, Upd: AtualizacaoProdutoFilialBuilder.Montar(c, cab, req.FilialId, agora)))
-            .ToList();
+        // Para cada item monta a linha de UPDATE (lote41) e, ao mesmo tempo, a linha do comparativo devolvido na API.
+        var lote41 = new List<ProdutoFilialAtualizacao>();
+        var comparativo = new List<ItemComparativo>();
+
+        foreach (var calculado in calculados)
+        {
+            // Montar devolve null quando o item não tem preço de venda nem promoção (WHERE do UPDATE da procedure)
+            var atualizacao = AtualizacaoProdutoFilialBuilder.Montar(calculado, cab, req.FilialId, agora);
+
+            if (atualizacao is not null)
+                lote41.Add(atualizacao);
+
+            comparativo.Add(ParaComparativo(calculado, atualizacao));
+        }
 
         // No modo simulação reutiliza a transação externa; no modo real abre a própria (BEGIN TRY / BEGIN TRANSACTION).
         IDbTransaction? txReal = txSim is null ? conn.BeginTransaction() : null;
@@ -88,7 +101,6 @@ public class BoletimPrecoService(
         try
         {
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Substituição do UPDATE gigante da procedure por comando em lote via Dapper
-            var lote41 = pares.Where(p => p.Upd is not null).Select(p => p.Upd!).ToList();
             await repo.AtualizarProdutoFilialAsync(conn, tx, lote41);
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão
@@ -119,7 +131,7 @@ public class BoletimPrecoService(
         }
         finally { txReal?.Dispose(); }
 
-        resultado.Itens = pares.Select(p => ParaComparativo(p.Calc, p.Upd)).ToList();
+        resultado.Itens = comparativo;
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Demandtec/Profimetrics)
         // Fora da transação principal no modo real (as SPs auxiliares têm transações próprias); dentro da simulação, para o ROLLBACK cobrir tudo.
@@ -128,6 +140,11 @@ public class BoletimPrecoService(
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 6]: Retorno final sempre 0 (SET @numRetorno = 0), como na procedure
         return RetornoProcessamento.Sucesso;
     }
+
+
+
+
+
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Montagem de uma linha da #BoletimCalc (custo, Preço 9, margens, arredondamento)
     private ItemCalculado Calcular(ItemBoletim i, TipoCusto tipoCusto, bool arredonda, int filialId)
@@ -140,14 +157,11 @@ public class BoletimPrecoService(
 
         // [FASE 3]: Migração da fórmula de Margem MBE com teto em 999.99%
         decimal? margemPreco9 = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemPreco9(preco9, custo) : null;
-        decimal? mbePrcVen = i.TemPrecoVenda
-            ? PrecoCalculator.CalcularMargemMbe(PrecoCalculator.ArredondarNumeric(i.PrcVenda!.Value, 2), custo)
-            : null;
+        decimal? mbePrcVen = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemMbe(PrecoCalculator.ArredondarNumeric(i.PrcVenda!.Value, 2), custo) : null;
 
         // [FASE 4]: PRECO_VENDA_CALC -> dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1
         decimal? precoVendaCalc = i.TemPrecoVenda
-            ? (arredonda ? arredondador.Arredondar(i.PrcVenda!.Value, filialId) : PrecoCalculator.ArredondarNumeric(i.PrcVenda!.Value, 2))
-            : null;
+            ? (arredonda ? arredondador.Arredondar(i.PrcVenda!.Value, filialId) : PrecoCalculator.ArredondarNumeric(i.PrcVenda!.Value, 2)) : null;
 
         return new ItemCalculado
         {
@@ -155,6 +169,10 @@ public class BoletimPrecoService(
             Preco9Calc = preco9, MargemPreco9 = margemPreco9, MbePrcVen = mbePrcVen
         };
     }
+
+
+
+
 
     private async Task ExecutarRegrasSempreAsync(
         IDbConnection conn, IDbTransaction? tx, BoletimCabecalho cab, ProcessarBoletimRequest req,
@@ -211,8 +229,9 @@ public class BoletimPrecoService(
             RetornoProcessamento.ErroUpdateCabecalhoRegrasSempre => "Erro no update do cabeçalho desc_produto_cab (regras sempre)",
             RetornoProcessamento.ErroInclusaoCabecalhoRegrasSempre => "Erro na inclusão do cabeçalho desc_produto_cab (regras sempre)",
             RetornoProcessamento.ErroInclusaoDetalheRegrasSempre => "Erro na inclusão do detalhe desc_produto_det (regras sempre)",
-            RetornoProcessamento.ErroDeleteDetalheRegrasSempre => "Erro no delete do detalhe desc_produto_det (regras sempre)",
-            RetornoProcessamento.ErroDeleteCabecalhoRegrasSempre => "Erro no delete do cabeçalho desc_produto_cab (regras sempre)",
+            RetornoProcessamento.ErroInclusaoClientesOuDeleteDetalheRegrasSempre => "Erro na inclusão de clientes ou delete do detalhe desc_produto_det (regras sempre)",
+            RetornoProcessamento.ErroInclusaoFinalizadoresOuDeleteCabecalhoRegrasSempre => "Erro na inclusão de finalizadores ou delete do cabeçalho desc_produto_cab (regras sempre)",
+            RetornoProcessamento.ErroCategoriasOuDeleteFinalizadoresRegrasSempre => "Erro em categorias ou delete de finalizadores (regras sempre)",
             _ => $"Retorno desconhecido ({(int)ret})"
         };
     }

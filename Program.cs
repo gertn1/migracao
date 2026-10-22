@@ -1,5 +1,6 @@
 using PrecificacaoPoc.Endpoints;
 using PrecificacaoPoc.Infrastructure;
+using PrecificacaoPoc.Interfaces;
 using PrecificacaoPoc.Services;
 
 var builder = WebApplication.CreateBuilder(args);

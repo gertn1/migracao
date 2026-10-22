@@ -2,28 +2,13 @@ using System.Data;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using PrecificacaoPoc.Domain;
+using PrecificacaoPoc.Interfaces;
 
 namespace PrecificacaoPoc.Infrastructure;
-
-public interface IDbConnectionFactory
-{
-    IDbConnection Criar();
-}
 
 public class SqlConnectionFactory(IConfiguration config) : IDbConnectionFactory
 {
     public IDbConnection Criar() => new SqlConnection(config.GetConnectionString("COSMOS"));
-}
-
-public interface IBoletimRepository
-{
-    Task<BoletimCabecalho?> ObterCabecalhoAsync(IDbConnection c, IDbTransaction? tx, int boletimId);
-    Task<char?> ObterTipoCustoAsync(IDbConnection c, IDbTransaction? tx);
-    Task<List<ItemBoletim>> ObterItensAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId);
-    Task<int> AtualizarProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<ProdutoFilialAtualizacao> lote);
-    Task AtualizarFarmaciaPopularExclusaoAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<PrecoFarmaciaPopularAtualizacao> lote);
-    Task AtualizarFarmaciaPopularAlteracaoAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<PrecoFarmaciaPopularAtualizacao> lote);
-    Task AtualizarProdutosAcordoAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<PromocaoAcordoAtualizacao> lote);
 }
 
 /// <summary>
@@ -74,6 +59,7 @@ public class BoletimRepository : IBoletimRepository
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Leitura do tipo de custo em PARAMETRO_PRECO (sem linha => retorno 2)
+    // retorna 'U', 'C' ou 'M'
     public async Task<char?> ObterTipoCustoAsync(IDbConnection c, IDbTransaction? tx)
     {
         const string sql = "SELECT TOP 1 PAPR_TP_CUSTOPV FROM PARAMETRO_PRECO WITH (NOLOCK)";

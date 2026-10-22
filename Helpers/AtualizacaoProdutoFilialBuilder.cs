@@ -1,6 +1,6 @@
 using PrecificacaoPoc.Domain;
 
-namespace PrecificacaoPoc.Services;
+namespace PrecificacaoPoc.Helpers;
 
 /// <summary>
 /// Resolve em C# todos os CASE / ISNULL / "ELSE pf.coluna" do UPDATE gigante (FASE 4.1) e dos UPDATEs 4.2-4.4.
@@ -10,8 +10,7 @@ public static class AtualizacaoProdutoFilialBuilder
 {
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Substituição do UPDATE gigante da procedure (montagem dos valores finais).
     // Retorna null quando a linha não satisfaz o WHERE (PRCVENDA > 0 OR PRCPROM > 0).
-    public static ProdutoFilialAtualizacao? Montar(
-        ItemCalculado calc, BoletimCabecalho cab, int filialId, DateTime agora)
+    public static ProdutoFilialAtualizacao? Montar(ItemCalculado calc, BoletimCabecalho cab, int filialId, DateTime agora)
     {
         var b = calc.Item;
         bool temVenda = b.TemPrecoVenda;
