@@ -76,7 +76,11 @@ public static class AtualizacaoProdutoFilialBuilder
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão (PRECO1/PRECO2 = NULL)
     public static PrecoFarmaciaPopularAtualizacao FarmaciaExclusao(ItemBoletim i, int filialId, DateTime agora) => new()
     {
-        FilialId = filialId, ProdutoId = i.ProdutoId, Preco1 = null, Preco2 = null, DataUltimaAtualizacao = agora
+        FilialId = filialId,
+        ProdutoId = i.ProdutoId,
+        Preco1 = null,
+        Preco2 = null,
+        DataUltimaAtualizacao = agora
     };
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração (só troca se o boletim trouxe o preço)

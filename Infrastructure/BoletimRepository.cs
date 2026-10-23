@@ -16,6 +16,8 @@ public class SqlConnectionFactory(IConfiguration config) : IDbConnectionFactory
 /// </summary>
 public class BoletimRepository : IBoletimRepository
 {
+    private const string FlagSim = "S";
+
     // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Validação de existência do boletim e leitura do cabeçalho (BOLETIM_PRECO_CAB)
     // DE-PARA: o "IF @@ROWCOUNT = 0 -> retorno 1" passa a ser "resultado == null" no service.
     public async Task<BoletimCabecalho?> ObterCabecalhoAsync(IDbConnection c, IDbTransaction? tx, int boletimId)
@@ -41,8 +43,8 @@ public class BoletimRepository : IBoletimRepository
             DtFimPromocao = row.DtFimPromocao,
             ProcessoGerador = row.ProcessoGerador,
             ProdutosAcordo = row.ProdutosAcordo ?? false,
-            Demandtec = (row.DemandtecRaw ?? "N") == "S",
-            Profimetrics = (row.ProfimetricsRaw ?? "N") == "S",
+            Demandtec = row.DemandtecRaw == FlagSim,
+            Profimetrics = row.ProfimetricsRaw == FlagSim,
             AtualizarPrecoEcommerce = row.AtualizarPrecoEcommerce ?? false
         };
     }

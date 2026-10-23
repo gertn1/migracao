@@ -46,8 +46,6 @@ public class BoletimPrecoService(
         }
     }
 
-
-
     private async Task<RetornoProcessamento> ExecutarFluxoAsync(
         IDbConnection conn, IDbTransaction? txSim, ProcessarBoletimRequest req, ResultadoProcessamento resultado)
     {
@@ -73,9 +71,8 @@ public class BoletimPrecoService(
         if (itens.Count == 0) return RetornoProcessamento.Sucesso;
 
         // Verifica se BoletimProfimetrics é iagual a 'N'"e @regBOPC_NM_PROCESSGER =/= 'MANUAL' (ou seja, se deve arredondar ou não)
-        var agora = DateTime.Now; 
+        var agora = DateTime.Now;
         bool arredonda = PrecoCalculator.DeveArredondar(cab);
-
 
         var calculados = itens.Select(i => Calcular(i, tipoCusto, arredonda, req.FilialId)).ToList();
 
@@ -92,6 +89,7 @@ public class BoletimPrecoService(
             if (atualizacao is not null)
                 lote41.Add(atualizacao);
 
+            //comparativo: é para fazer a comparacao de antes e depois.
             comparativo.Add(ParaComparativo(calculado, atualizacao));
         }
 
@@ -105,18 +103,33 @@ public class BoletimPrecoService(
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão
             if (cab.ProcessoGerador == ProcessoFarmaciaExclusao)
-                await repo.AtualizarFarmaciaPopularExclusaoAsync(conn, tx,
-                    itens.Select(i => AtualizacaoProdutoFilialBuilder.FarmaciaExclusao(i, req.FilialId, agora)));
+            {
+                var atualizacoes = itens
+                 .Select(item => AtualizacaoProdutoFilialBuilder.FarmaciaExclusao(item, req.FilialId, agora))
+                 .ToList();
+
+                await repo.AtualizarFarmaciaPopularExclusaoAsync(conn, tx, atualizacoes);
+            }
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração
             if (cab.ProcessoGerador == ProcessoFarmaciaAlteracao)
-                await repo.AtualizarFarmaciaPopularAlteracaoAsync(conn, tx,
-                    itens.Select(i => AtualizacaoProdutoFilialBuilder.FarmaciaAlteracao(i, req.FilialId, agora)));
+            {
+                var atualizacoes = itens
+                    .Select(item => AtualizacaoProdutoFilialBuilder.FarmaciaAlteracao(item, req.FilialId, agora))
+                    .ToList();
+
+                await repo.AtualizarFarmaciaPopularAlteracaoAsync(conn, tx, atualizacoes);
+            }
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo
-            if (cab.ProdutosAcordo)
-                await repo.AtualizarProdutosAcordoAsync(conn, tx,
-                    itens.Select(i => AtualizacaoProdutoFilialBuilder.Acordo(i, cab, req.FilialId, agora)));
+            if (cab.ProdutosAcordo == true)
+            {
+                var atualizacoes = itens
+                    .Select(item => AtualizacaoProdutoFilialBuilder.Acordo(item, cab, req.FilialId, agora))
+                    .ToList();
+
+                await repo.AtualizarProdutosAcordoAsync(conn, tx, atualizacoes);
+            }
 
             txReal?.Commit(); // COMMIT TRANSACTION (no modo simulação o ROLLBACK ocorre no finally do chamador)
             resultado.TotalItensAtualizados = lote41.Count;
@@ -141,11 +154,6 @@ public class BoletimPrecoService(
         return RetornoProcessamento.Sucesso;
     }
 
-
-
-
-
-
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Montagem de uma linha da #BoletimCalc (custo, Preço 9, margens, arredondamento)
     private ItemCalculado Calcular(ItemBoletim i, TipoCusto tipoCusto, bool arredonda, int filialId)
     {
@@ -165,42 +173,56 @@ public class BoletimPrecoService(
 
         return new ItemCalculado
         {
-            Item = i, Arredonda = arredonda, PrecoVendaCalc = precoVendaCalc,
-            Preco9Calc = preco9, MargemPreco9 = margemPreco9, MbePrcVen = mbePrcVen
+            Item = i,
+            Arredonda = arredonda,
+            PrecoVendaCalc = precoVendaCalc,
+            Preco9Calc = preco9,
+            MargemPreco9 = margemPreco9,
+            MbePrcVen = mbePrcVen
         };
     }
-
-
-
-
 
     private async Task ExecutarRegrasSempreAsync(
         IDbConnection conn, IDbTransaction? tx, BoletimCabecalho cab, ProcessarBoletimRequest req,
         List<ItemCalculado> calculados, ResultadoProcessamento resultado)
     {
-        if (!cab.Demandtec && !cab.Profimetrics) return;
-
-        // Filtro dos cursores: ISNULL(PMC,0) > 0 AND ISNULL(PRCVENDA3,0) > 0; preço 3 passa pela função de arredondamento.
+        // Filtro dos dois cursores (idêntico nos dois): WHERE ISNULL(PRECO_MAXIMO_CONSUMIDOR,0) > 0 AND ISNULL(BOPD_VL_PRCVENDA3,0) > 0
         var elegiveis = calculados
             .Where(c => c.Item.PrecoMaximoConsumidor is > 0 && c.Item.PrcVenda3 is > 0)
-            .Select(c => new ItemRegraSempre(c.Item.ProdutoId, c.Item.PrecoMaximoConsumidor!.Value,
-                arredondador.Arredondar(c.Item.PrcVenda3!.Value, req.FilialId)))
+            .Select(c => c.Item)
             .ToList();
 
-        foreach (var e in elegiveis)
+        // [FASE 5.1] IF @regBOLETIM_DEMANDTEC = 'S' -> a flag é verificada UMA vez; se verdadeira, percorre todos os itens elegíveis.
+        if (cab.Demandtec)
         {
-            if (cab.Demandtec)
+            foreach (var item in elegiveis)
             {
-                int r = await regrasSempre.AtualizarRegraDemandtecAsync(conn, tx, e.ProdutoId, req.FilialId, e.PrecoMaximoConsumidor, e.Preco3Arredondado);
-                if (r != 0) resultado.Observacoes.Add($"Demandtec produto {e.ProdutoId}: retorno {r}");
+                // SET @auxPreco3 = DBO.fn_ARREDONDA_PRECO_VENDA_MONITORADO(@auxPreco3, @COD_FILIAL)
+                decimal preco3 = arredondador.Arredondar(item.PrcVenda3!.Value, req.FilialId);
+
+                // EXEC sp_AtualizaRegrasSempreDemandtec @auxProduto, @COD_FILIAL, @auxPMC, @auxPreco3, @retornoSempre OUTPUT
+                int retorno = await regrasSempre.AtualizarRegraDemandtecAsync(
+                    conn, tx, item.ProdutoId, req.FilialId, item.PrecoMaximoConsumidor!.Value, preco3);
+
+                if (retorno != 0) resultado.Observacoes.Add($"Demandtec produto {item.ProdutoId}: retorno {retorno}");
             }
-            if (cab.Profimetrics)
-            {
-                int r = await regrasSempre.AtualizarRegraProfimetricsAsync(conn, tx, e.ProdutoId, req.FilialId, e.PrecoMaximoConsumidor, e.Preco3Arredondado);
-                if (r != 0) resultado.Observacoes.Add($"Profimetrics produto {e.ProdutoId}: retorno {r}");
-            }
+            resultado.Observacoes.Add($"Regras Demandtec executadas para {elegiveis.Count} item(ns).");
         }
-        resultado.Observacoes.Add($"Regras SEMPRE executadas para {elegiveis.Count} item(ns) elegível(is).");
+
+        // [FASE 5.2] IF @regBOLETIM_PROFIMETRICS = 'S' -> só começa depois que TODO o Demandtec terminou, como na procedure.
+        if (cab.Profimetrics)
+        {
+            foreach (var item in elegiveis)
+            {
+                decimal preco3 = arredondador.Arredondar(item.PrcVenda3!.Value, req.FilialId);
+
+                int retorno = await regrasSempre.AtualizarRegraProfimetricsAsync(
+                    conn, tx, item.ProdutoId, req.FilialId, item.PrecoMaximoConsumidor!.Value, preco3);
+
+                if (retorno != 0) resultado.Observacoes.Add($"Profimetrics produto {item.ProdutoId}: retorno {retorno}");
+            }
+            resultado.Observacoes.Add($"Regras Profimetrics executadas para {elegiveis.Count} item(ns).");
+        }
     }
 
     private static ItemComparativo ParaComparativo(ItemCalculado c, ProdutoFilialAtualizacao? u) => new()
