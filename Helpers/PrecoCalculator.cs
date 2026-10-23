@@ -29,7 +29,8 @@ public static class PrecoCalculator
     // Equivale a CONVERT(NUMERIC(12,2), ROUND(<CASE>, 2, 2)) -> o 3º argumento "2" do ROUND SQL TRUNCA (não arredonda).
     public static decimal? CalcularPreco9(ItemBoletim i)
     {
-        if (i.PrcVenda is <= 0) return null;
+        // SQL: CASE WHEN BOPD_VL_PRCVENDA IS NOT NULL AND > 0 ... sem ELSE -> NULL quando venda é NULL ou <= 0
+        if (i.PrcVenda is null or <= 0) return null;
 
         decimal venda = ArredondarNumeric(i.PrcVenda!.Value, 2);       // normalizado.BOPD_VL_PRCVENDA NUMERIC(12,2)
         decimal pmc = i.PfPrcMaxCons ?? 0m;                            // ISNULL(PRFI_VL_PRCMAXCONS, 0)
