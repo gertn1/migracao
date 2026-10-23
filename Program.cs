@@ -1,6 +1,9 @@
 using PrecificacaoPoc.Endpoints;
+using PrecificacaoPoc.Endpoints.ApenasTestes;
 using PrecificacaoPoc.Infrastructure;
+using PrecificacaoPoc.Infrastructure.ApenasTestes;
 using PrecificacaoPoc.Interfaces;
+using PrecificacaoPoc.Interfaces.ApenasTestes;
 using PrecificacaoPoc.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +18,9 @@ builder.Services.AddScoped<IRegrasSempreGateway, RegrasSempreGateway>();
 builder.Services.AddSingleton<IArredondadorPrecoVenda, ArredondadorPrecoVendaPoc>();
 builder.Services.AddScoped<BoletimPrecoService>();
 
+// APENAS TESTES / COMPARAÇÃO (não faz parte da procedure)
+builder.Services.AddScoped<IConsultaTesteRepository, ConsultaTesteRepository>();
+
 var app = builder.Build();
 
 // --- 2. Habilitar o Swagger na aplicação ---
@@ -25,6 +31,9 @@ if (app.Environment.IsDevelopment())
 
     // Redireciona o acesso da raiz (/) direto para o /swagger
     app.MapGet("/", () => Results.Redirect("/swagger"));
+
+    // APENAS TESTES / COMPARAÇÃO: endpoints GET de consulta, mapeados somente em Development
+    app.MapConsultasTesteEndpoints();
 }
 
 app.MapPrecificacaoEndpoints();
