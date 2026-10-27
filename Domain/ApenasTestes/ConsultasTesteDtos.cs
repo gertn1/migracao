@@ -17,6 +17,39 @@ public class ConsultaBoletimResposta
     public List<ItemBoletim> Itens { get; set; } = new();
 }
 
+// Resposta do GET /api/testes/boletins/{boletimId}/genericos-ia/status: se a sp_AtualizaPrecoVendaGenericosEstruturaSempre
+// já aplicou o boletim (preço no PRODUTO_FILIAL igual ao do boletim + regra "Desconto em Genérico" em CosmosFL)
+public class StatusGenericosIaResposta
+{
+    public int BoletimId { get; set; }
+    public int FilialId { get; set; }
+    public string? ProcessoGerador { get; set; }
+    public bool EhGenericosIa { get; set; }
+    public int TotalItens { get; set; }
+    public int ItensIgnoradosDuplicados { get; set; }
+    public int ItensAplicados { get; set; }
+    public int ItensPendentes { get; set; }
+    // true quando todos os itens considerados (exceto duplicados) já estão com o preço do boletim
+    public bool Processado { get; set; }
+    public List<StatusItemGenericosIa> Itens { get; set; } = new();
+}
+
+public class StatusItemGenericosIa
+{
+    public int ProdutoId { get; set; }
+    public decimal? PrecoVendaBoletim { get; set; }
+    public decimal? PrecoVenda3Boletim { get; set; }
+    public decimal? PrecoVendaAtual { get; set; }
+    public decimal? Preco3Atual { get; set; }
+    public DateTime? DhUltimaAtualizacaoBoletim { get; set; }
+    public bool Duplicado { get; set; }
+    public bool PrecoAplicado { get; set; }
+    public string NomeRegraSempre { get; set; } = "";
+    public bool RegraSempreExiste { get; set; }
+    public DateTime? RegraSempreDtInclusao { get; set; }
+    public decimal? RegraSempreDescontoPercentual { get; set; }
+}
+
 // Estado atual de PRODUTO_FILIAL (GET /api/testes/produto-filial/{filialId}/{produtoId}),
 // para comparar antes/depois da procedure original ou da simulação
 public class ProdutoFilialAtual

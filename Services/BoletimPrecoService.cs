@@ -58,7 +58,7 @@ public class BoletimPrecoService(
         var tipoCusto = (TipoCusto)tipoCustoChar.Value;
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 2]: Desvio condicional quando o processo gerador for 'GENERICOS IA'
-        if (cab.ProcessoGeradorNormalizado == ProcessoGenericosIa)
+        if (cab.ProcessoGerador == ProcessoGenericosIa)
         {
             int ret = await regrasSempre.AtualizarGenericosIaAsync(conn, txSim, req.BoletimId, req.FilialId, req.UsuarioId);
             resultado.Observacoes.Add("Processo GENERICOS IA: delegado integralmente à sp_AtualizaPrecoVendaGenericosEstruturaSempre (fluxo da procedure original).");

@@ -7,4 +7,6 @@ namespace PrecificacaoPoc.Interfaces.ApenasTestes;
 public interface IConsultaTesteRepository
 {
     Task<ProdutoFilialAtual?> ObterProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, int filialId, int produtoId);
+
+    Task<List<StatusItemGenericosIa>> ObterStatusGenericosIaAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId);
 }

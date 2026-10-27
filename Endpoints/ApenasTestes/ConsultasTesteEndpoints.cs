@@ -39,6 +39,45 @@ public static class ConsultasTesteEndpoints
             })
             .WithName("TesteConsultarBoletim");
 
+        // GENERICOS IA: diz se o boletim já foi aplicado pela sp_AtualizaPrecoVendaGenericosEstruturaSempre
+        grupo.MapGet("/boletins/{boletimId:int}/genericos-ia/status",
+            async (int boletimId, int filialId, IDbConnectionFactory factory, IBoletimRepository boletimRepo, IConsultaTesteRepository repo) =>
+            {
+                if (filialId <= 0 || boletimId <= 0)
+                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+
+                using var conn = factory.Criar();
+                conn.Open();
+
+                var cab = await boletimRepo.ObterCabecalhoAsync(conn, null, boletimId);
+                if (cab is null) return Results.NotFound(new { erro = $"Boletim {boletimId} não existe (retorno 1)." });
+
+                var itens = await repo.ObterStatusGenericosIaAsync(conn, null, filialId, boletimId);
+                foreach (var i in itens)
+                    i.PrecoAplicado = !i.Duplicado
+                        && i.PrecoVendaBoletim is > 0
+                        && i.PrecoVendaAtual == i.PrecoVendaBoletim
+                        && i.Preco3Atual == i.PrecoVenda3Boletim;
+
+                var considerados = itens.Where(i => !i.Duplicado).ToList();
+                var aplicados = considerados.Count(i => i.PrecoAplicado);
+
+                return Results.Ok(new StatusGenericosIaResposta
+                {
+                    BoletimId = boletimId,
+                    FilialId = filialId,
+                    ProcessoGerador = cab.ProcessoGerador,
+                    EhGenericosIa = cab.ProcessoGeradorNormalizado == "GENERICOS IA",
+                    TotalItens = itens.Count,
+                    ItensIgnoradosDuplicados = itens.Count - considerados.Count,
+                    ItensAplicados = aplicados,
+                    ItensPendentes = considerados.Count - aplicados,
+                    Processado = considerados.Count > 0 && aplicados == considerados.Count,
+                    Itens = itens
+                });
+            })
+            .WithName("TesteStatusGenericosIa");
+
         // Estado atual do produto na filial, para comparar antes/depois
         grupo.MapGet("/produto-filial/{filialId:int}/{produtoId:int}",
             async (int filialId, int produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
