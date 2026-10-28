@@ -1,7 +1,9 @@
 namespace PrecificacaoPoc.Domain;
 
 // Payload do endpoint POST /api/precificacao/processar-boletim
-public record ProcessarBoletimRequest(int FilialId, int BoletimId, int UsuarioId, bool SimularApenas);
+// simularApenas não faz parte do objeto: vai na query string (?simularApenas=true).
+public record ProcessarBoletimRequest(
+    int UsuarioId, int FilialId, BoletimCabecalho Cab, List<ItemBoletim> Det);
 
 // Comparativo por item devolvido ao chamador (antes x depois)
 public class ItemComparativo

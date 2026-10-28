@@ -39,6 +39,7 @@ public class BoletimRepository : IBoletimRepository
         // Os ISNULL(...,'N') / ISNULL(...,0) da procedure viraram tratamento de nulo em C#.
         return new BoletimCabecalho
         {
+            Id = boletimId,
             DtInicioPromocao = row.DtInicioPromocao,
             DtFimPromocao = row.DtFimPromocao,
             ProcessoGerador = row.ProcessoGerador,

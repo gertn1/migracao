@@ -87,6 +87,7 @@ public enum TipoCusto
 // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Variáveis @reg* lidas de BOLETIM_PRECO_CAB (com os ISNULL já aplicados).
 public class BoletimCabecalho
 {
+    public int Id { get; set; }                       // BOPC_SQ_BOLETIM (PriceBulletinCab.Id)
     public DateTime? DtInicioPromocao { get; set; }   // @regBOPC_DT_INIPREPRO
     public DateTime? DtFimPromocao { get; set; }      // @regBOPC_DT_FIMPREPRO
     public string? ProcessoGerador { get; set; }      // @regBOPC_NM_PROCESSGER
@@ -106,6 +107,7 @@ public class ItemBoletim
 
     // BOLETIM_PRECO_DET
     public decimal? PrcVenda { get; set; }
+
     public decimal? PrcProm { get; set; }
     public decimal? PrcVenda1 { get; set; }
     public decimal? PrcVenda2 { get; set; }
@@ -122,6 +124,7 @@ public class ItemBoletim
 
     // PRODUTO_FILIAL (estado atual)
     public decimal? PfUcg { get; set; }
+
     public decimal? PfCmpg { get; set; }
     public decimal? PfPrcMaxCons { get; set; }
     public decimal? PfPrecoVenda { get; set; }
@@ -155,7 +158,7 @@ public class ItemBoletim
 // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Colunas calculadas da #BoletimCalc (PRECO_VENDA_CALC, PRECO9_CALC, MARGEM_PRECO9, MBE_PRCVEN, FL_ARREDONDA).
 public class ItemCalculado
 {
-    public required ItemBoletim Item { get; init; }
+    public ItemBoletim Item { get; init; }
     public bool Arredonda { get; init; }
     public decimal? PrecoVendaCalc { get; init; }
     public decimal? Preco9Calc { get; init; }
