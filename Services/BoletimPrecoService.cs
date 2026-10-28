@@ -1,7 +1,7 @@
-using System.Data;
 using PrecificacaoPoc.Domain;
 using PrecificacaoPoc.Helpers;
 using PrecificacaoPoc.Interfaces;
+using System.Data;
 
 namespace PrecificacaoPoc.Services;
 
@@ -19,11 +19,26 @@ public class BoletimPrecoService(
     private const string ProcessoFarmaciaExclusao = "Farmacia Popular - exclusao";
     private const string ProcessoFarmaciaAlteracao = "Farmacia Popular - alteracao";
 
-    // cab e det já vêm carregados pelo chamador (uma única leitura); o id do boletim (cab.Id) e usuarioId só são usados pela delegação GENERICOS IA.
-    public async Task<ResultadoProcessamento> ProcessarAsync(
-        int filialId, BoletimCabecalho cab, List<ItemBoletim> det, int usuarioId, bool simularApenas)
+    // Entrada a partir do objeto do boletim (saída do PriceBulletinMapper). Cab e itens já trazem tudo o que a procedure lia de
+    // BOLETIM_PRECO_CAB/DET; o que falta é o estado atual de PRODUTO_FILIAL/PRODUTO_MESTRE de cada produto na filial
+    // (custos, preços atuais, monitorado), buscado aqui.
+    public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, BoletimCabecalho cab, List<ItemBoletim> boletim, int usuarioId, bool simularApenas)
     {
-        var resultado = new ResultadoProcessamento { Simulado = simularApenas };
+        List<ItemBoletim> itens;
+        using (var conn = connectionFactory.Criar())
+        {
+            conn.Open();
+
+            var estadoProdutoFilial = await repo.ObterEstadoProdutoFilialAsync(conn, null, filialId, cab.Id, boletim.Select(i => i.ProdutoId));
+            itens = PriceBulletinMapper.Mesclar(boletim, estadoProdutoFilial);
+        }
+        return await ProcessarAsync(filialId, cab, itens, usuarioId, simularApenas);
+    }
+
+    // cab e det já vêm carregados pelo chamador (uma única leitura); o id do boletim (cab.Id) e usuarioId só são usados pela delegação GENERICOS IA.
+    public async Task<ResultadoProcessamento> ProcessarAsync(int filialId, BoletimCabecalho cab, List<ItemBoletim> det, int usuarioId, bool simularApenas)
+    {
+        var resultado = new ResultadoProcessamento { Simulado = simularApenas, FilialId = filialId };
         using var conn = connectionFactory.Criar();
         conn.Open();
 
@@ -49,8 +64,7 @@ public class BoletimPrecoService(
     }
 
     private async Task<RetornoProcessamento> ExecutarFluxoAsync(
-        IDbConnection conn, IDbTransaction? txSim, int filialId, BoletimCabecalho cab, List<ItemBoletim> itens,
-        int usuarioId, ResultadoProcessamento resultado)
+        IDbConnection conn, IDbTransaction? txSim, int filialId, BoletimCabecalho cab, List<ItemBoletim> itens, int usuarioId, ResultadoProcessamento resultado)
     {
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 1]: Leitura do tipo de custo em PARAMETRO_PRECO (a existência do boletim é validada por quem carrega o cab)
         var tipoCustoChar = await repo.ObterTipoCustoAsync(conn, txSim);

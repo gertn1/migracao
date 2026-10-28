@@ -1,9 +1,12 @@
+using PrecificacaoPoc.Domain.ApenasTestes;
+
 namespace PrecificacaoPoc.Domain;
 
 // Payload do endpoint POST /api/precificacao/processar-boletim
 // simularApenas não faz parte do objeto: vai na query string (?simularApenas=true).
+// Cab, Det e Env têm o formato das entidades da aplicação real; a filial vem de Env.StoreId (uma execução por filial).
 public record ProcessarBoletimRequest(
-    int UsuarioId, int FilialId, BoletimCabecalho Cab, List<ItemBoletim> Det);
+    int UsuarioId, PriceBulletinCab Cab, List<PriceBulletinDet> Det, List<PriceBulletinEnv> Env);
 
 // Comparativo por item devolvido ao chamador (antes x depois)
 public class ItemComparativo
@@ -21,6 +24,7 @@ public class ItemComparativo
 
 public class ResultadoProcessamento
 {
+    public int FilialId { get; set; }
     public int StatusRetorno { get; set; }
     public string Descricao { get; set; } = "";
     public bool Simulado { get; set; }

@@ -129,6 +129,58 @@ public class BoletimRepository : IBoletimRepository
         return (await c.QueryAsync<ItemBoletim>(sql, new { filialId, boletimId }, tx)).AsList();
     }
 
+
+    // Estado atual de PRODUTO_FILIAL/PRODUTO_MESTRE dos produtos de um Det já em memória (os preços do boletim vêm do objeto, não do banco).
+    // Mantém o filtro NOT EXISTS (FUTURO_PRECO_DUPLICADO) da carga original.
+    public async Task<List<ItemBoletim>> ObterEstadoProdutoFilialAsync(
+        IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, IEnumerable<int> produtoIds)
+    {
+        var ids = produtoIds.Distinct().ToList();
+        if (ids.Count == 0) return new List<ItemBoletim>();
+
+        const string sql = @"
+            SELECT pf.PRME_CD_PRODUTO                 AS ProdutoId,
+                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 ELSE 0 END AS Monitorado,
+                   pf.PRFI_VL_UCG                     AS PfUcg,
+                   pf.PRFI_VL_CMPG                    AS PfCmpg,
+                   pf.PRFI_VL_PRCMAXCONS              AS PfPrcMaxCons,
+                   pf.PRFI_VL_PRECOVENDA              AS PfPrecoVenda,
+                   pf.PRFI_VL_PRECO1                  AS PfPreco1,
+                   pf.PRFI_VL_PRECO2                  AS PfPreco2,
+                   pf.PRFI_VL_PRECO3                  AS PfPreco3,
+                   pf.PRFI_VL_PRECO6                  AS PfPreco6,
+                   pf.PRFI_VL_PRECO9                  AS PfPreco9,
+                   pf.PRFI_PR_MBEPRCVEN               AS PfMbePrcVen,
+                   pf.PRFI_PR_MBEPRECO9               AS PfMbePreco9,
+                   pf.MARGEM_VENDA_PRECIFICACAO       AS PfMargemVendaPrecificacao,
+                   pf.MARGEM_PROMOCAO_PRECIFICACAO    AS PfMargemPromocaoPrecificacao,
+                   pf.PRFI_PR_MARGANTPMC              AS PfMargAntPmc,
+                   pf.PRFI_PR_MARGCALPMC              AS PfMargCalPmc,
+                   pf.PRFI_VL_PRCPROM                 AS PfPrcProm,
+                   pf.PRFI_DT_INIPRCPROM              AS PfDtIniPrcProm,
+                   pf.PRFI_DT_FIMPRCPROM              AS PfDtFimPrcProm,
+                   pf.PRECO_VENDA_ECOMMERCE           AS PfPrecoVendaEcommerce,
+                   pf.PRECO_PROMOCAO_ECOMMERCE        AS PfPrecoPromocaoEcommerce,
+                   pf.DATA_INICIO_PROMOCAO_ECOMMERCE  AS PfDataInicioPromoEcommerce,
+                   pf.DATA_FIM_PROMOCAO_ECOMMERCE     AS PfDataFimPromoEcommerce,
+                   pf.MARGEM_VENDA_MAXIMO_ECOMMERCE   AS PfMargemVendaMaximoEcommerce,
+                   pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE   AS PfDataAtualizacaoBoletimEcommerce,
+                   pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE AS PfDataAlteracaoPrecoVendaEcommerce,
+                   pf.ENCARTE_CLIENTE_SEMPRE          AS PfEncarteClienteSempre
+            FROM PRODUTO_FILIAL pf WITH (NOLOCK)
+            INNER JOIN PRODUTO_MESTRE pm WITH (NOLOCK)
+                ON pm.PRME_CD_PRODUTO = pf.PRME_CD_PRODUTO
+            WHERE pf.FILI_CD_FILIAL = @filialId
+              AND pf.PRME_CD_PRODUTO IN @ids
+              AND NOT EXISTS (
+                  SELECT 1 FROM COSMOSPRECOS.dbo.FUTURO_PRECO_DUPLICADO fp
+                  WHERE fp.BOPC_SQ_BOLETIM = @boletimId
+                    AND fp.StoreId = @filialId
+                    AND fp.ProductId = pf.PRME_CD_PRODUTO)";
+
+        return (await c.QueryAsync<ItemBoletim>(sql, new { filialId, boletimId, ids }, tx)).AsList();
+    }
+
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Substituição do UPDATE gigante da procedure por comando em lote via Dapper.
     // O SQL só atribui parâmetros às colunas: todos os CASE/ISNULL foram resolvidos no C# (AtualizacaoProdutoFilialBuilder).
     // Dapper executa o comando uma vez para cada elemento da lista, dentro da mesma transação.
@@ -159,7 +211,6 @@ public class BoletimRepository : IBoletimRepository
                 ENCARTE_CLIENTE_SEMPRE = @EncarteClienteSempre,
                 PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao,
                 PRFI_DH_ULTATUBOLE = @DataUltimaAtualizacao
-                -- XXXX_DH_ALT: mantido fora por solicitação do DBA (atualizado pela trigger tg_produto_filial_update)
             WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
 
         return await c.ExecuteAsync(sql, lote, tx);
