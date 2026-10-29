@@ -14,7 +14,7 @@ public class ConsultaBoletimResposta
     public int FilialId { get; set; }
     public BoletimCabecalho Cabecalho { get; set; } = new();
     public char? TipoCusto { get; set; }
-    public List<ItemBoletim> Itens { get; set; } = new();
+    public List<ItemBoletimTeste> Itens { get; set; } = new();
 }
 
 // Resposta do GET /api/testes/boletins/{boletimId}/genericos-ia/status: se a sp_AtualizaPrecoVendaGenericosEstruturaSempre
@@ -76,4 +76,55 @@ public class ProdutoFilialAtual
     public decimal? PrecoPromocaoEcommerce { get; set; }
     public DateTime? DtUltimaAtualizacaoPreco { get; set; }
     public DateTime? DhUltimaAtualizacaoBoletim { get; set; }
+}
+
+// Item do boletim (BOLETIM_PRECO_DET) + estado COMPLETO de PRODUTO_FILIAL/PRODUTO_MESTRE, só para conferência.
+// Prefixo "Pf" = valor atual em PRODUTO_FILIAL. O fluxo real usa ItemBoletim, que carrega apenas as colunas necessárias.
+public class ItemBoletimTeste
+{
+    public int ProdutoId { get; set; }
+
+    // BOLETIM_PRECO_DET
+    public decimal? PrcVenda { get; set; }
+    public decimal? PrcProm { get; set; }
+    public decimal? PrcVenda1 { get; set; }
+    public decimal? PrcVenda2 { get; set; }
+    public decimal? PrcVenda3 { get; set; }
+    public decimal? PrcVenda6 { get; set; }
+    public decimal? MargemVendaPrecificacao { get; set; }
+    public decimal? MargemPromocaoPrecificacao { get; set; }
+    public decimal? DescontoEmbutido { get; set; }
+    public decimal? PrecoMaximoConsumidor { get; set; }
+    public string? EncarteClienteSempre { get; set; }
+
+    // PRODUTO_MESTRE (true = 'S', false = 'N', null = outro valor)
+    public bool? Monitorado { get; set; }
+
+    // PRODUTO_FILIAL (estado atual)
+    public decimal? PfUcg { get; set; }
+    public decimal? PfCmpg { get; set; }
+    public decimal? PfPrcMaxCons { get; set; }
+    public decimal? PfPrecoVenda { get; set; }
+    public decimal? PfPreco1 { get; set; }
+    public decimal? PfPreco2 { get; set; }
+    public decimal? PfPreco3 { get; set; }
+    public decimal? PfPreco6 { get; set; }
+    public decimal? PfPreco9 { get; set; }
+    public decimal? PfMbePrcVen { get; set; }
+    public decimal? PfMbePreco9 { get; set; }
+    public decimal? PfMargemVendaPrecificacao { get; set; }
+    public decimal? PfMargemPromocaoPrecificacao { get; set; }
+    public decimal? PfMargAntPmc { get; set; }
+    public decimal? PfMargCalPmc { get; set; }
+    public decimal? PfPrcProm { get; set; }
+    public DateTime? PfDtIniPrcProm { get; set; }
+    public DateTime? PfDtFimPrcProm { get; set; }
+    public decimal? PfPrecoVendaEcommerce { get; set; }
+    public decimal? PfPrecoPromocaoEcommerce { get; set; }
+    public DateTime? PfDataInicioPromoEcommerce { get; set; }
+    public DateTime? PfDataFimPromoEcommerce { get; set; }
+    public decimal? PfMargemVendaMaximoEcommerce { get; set; }
+    public DateTime? PfDataAtualizacaoBoletimEcommerce { get; set; }
+    public DateTime? PfDataAlteracaoPrecoVendaEcommerce { get; set; }
+    public string? PfEncarteClienteSempre { get; set; }
 }

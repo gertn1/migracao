@@ -16,9 +16,6 @@ public class BoletimPrecoService(
     private const string ProcessoFarmaciaExclusao = "FARMACIA POPULAR - EXCLUSAO";
     private const string ProcessoFarmaciaAlteracao = "FARMACIA POPULAR - ALTERACAO";
 
-    // Entrada a partir do objeto do boletim (saída do PriceBulletinMapper). Cab e itens já trazem tudo o que a procedure lia de
-    // BOLETIM_PRECO_CAB/DET; o que falta é o estado atual de PRODUTO_FILIAL/PRODUTO_MESTRE de cada produto na filial
-    // (custos, preços atuais, monitorado), buscado aqui.
     public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, BoletimCabecalho cab, List<ItemBoletim> boletim, int usuarioId, bool simularApenas)
     {
         if (cab.ProcessoGeradorNormalizado == ProcessoGenericosIa)
@@ -35,7 +32,6 @@ public class BoletimPrecoService(
         return await ProcessarAsync(filialId, cab, itens, usuarioId, simularApenas);
     }
 
-    // cab e det já vêm carregados pelo chamador (uma única leitura); o id do boletim (cab.Id) e usuarioId só são usados pela delegação GENERICOS IA.
     public async Task<ResultadoProcessamento> ProcessarAsync(int filialId, BoletimCabecalho cab, List<ItemBoletim> det, int usuarioId, bool simularApenas)
     {
         var resultado = new ResultadoProcessamento { Simulado = simularApenas, FilialId = filialId };
@@ -137,10 +133,8 @@ public class BoletimPrecoService(
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo
             if (cab.ProdutosAcordo == true)
             {
-                var atualizadoPorProduto = lote41.ToDictionary(a => a.ProdutoId);
                 var atualizacoes = itens
-                    .Select(item => AtualizacaoProdutoFilialBuilder.Acordo(
-                        item, cab, filialId, agora, atualizadoPorProduto.GetValueOrDefault(item.ProdutoId)))
+                    .Select(item => AtualizacaoProdutoFilialBuilder.Acordo(item, cab, filialId, agora))
                     .ToList();
 
                 await repo.AtualizarProdutosAcordoAsync(conn, tx, atualizacoes);
@@ -249,7 +243,7 @@ public class BoletimPrecoService(
         NovoPreco9 = u?.Preco9 ?? c.Item.PfPreco9,
         MargemMbe = u?.MbePrcVen ?? c.Item.PfMbePrcVen,
         MargemMbePreco9 = u?.MbePreco9 ?? c.Item.PfMbePreco9,
-        NovaPromocao = u?.PrcProm ?? c.Item.PfPrcProm,
+        NovaPromocao = c.Item.TemPromocao ? c.Item.PrcProm : c.Item.PfPrcProm,
         Atualizado = u is not null
     };
 

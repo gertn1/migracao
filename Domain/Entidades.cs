@@ -100,7 +100,8 @@ public class BoletimCabecalho
 }
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Uma linha da #BoletimCalc ANTES dos cálculos (apenas dados crus lidos do banco).
-// Prefixo "Pf" = valor atual em PRODUTO_FILIAL (necessário para reproduzir os "ELSE pf.<coluna>" do UPDATE).
+// Prefixo "Pf" = valor atual em PRODUTO_FILIAL. Só se lê o que os cálculos e o comparativo precisam;
+// o que o boletim não altera simplesmente não entra nos UPDATEs (ver BoletimRepository.AtualizarProdutoFilialAsync).
 public class ItemBoletim
 {
     public int ProdutoId { get; set; }
@@ -123,34 +124,19 @@ public class ItemBoletim
     // PRME_FL_MONITORADO: true = 'S', false = 'N', null = qualquer outro valor (o CASE da procedure cai no ELSE -> mantém o Preço 9 atual)
     public bool? Monitorado { get; set; }
 
-    // PRODUTO_FILIAL (estado atual)
+    // PRODUTO_FILIAL (estado atual) - usados nos cálculos da Fase 3
     public decimal? PfUcg { get; set; }
 
     public decimal? PfCmpg { get; set; }
     public decimal? PfPrcMaxCons { get; set; }
-    public decimal? PfPrecoVenda { get; set; }
-    public decimal? PfPreco1 { get; set; }
-    public decimal? PfPreco2 { get; set; }
-    public decimal? PfPreco3 { get; set; }
-    public decimal? PfPreco6 { get; set; }
     public decimal? PfPreco9 { get; set; }
+
+    // PRODUTO_FILIAL (estado atual) - usados só no comparativo (antes x depois) devolvido pela API
+    public decimal? PfPrecoVenda { get; set; }
+
     public decimal? PfMbePrcVen { get; set; }
     public decimal? PfMbePreco9 { get; set; }
-    public decimal? PfMargemVendaPrecificacao { get; set; }
-    public decimal? PfMargemPromocaoPrecificacao { get; set; }
-    public decimal? PfMargAntPmc { get; set; }
-    public decimal? PfMargCalPmc { get; set; }
     public decimal? PfPrcProm { get; set; }
-    public DateTime? PfDtIniPrcProm { get; set; }
-    public DateTime? PfDtFimPrcProm { get; set; }
-    public decimal? PfPrecoVendaEcommerce { get; set; }
-    public decimal? PfPrecoPromocaoEcommerce { get; set; }
-    public DateTime? PfDataInicioPromoEcommerce { get; set; }
-    public DateTime? PfDataFimPromoEcommerce { get; set; }
-    public decimal? PfMargemVendaMaximoEcommerce { get; set; }
-    public DateTime? PfDataAtualizacaoBoletimEcommerce { get; set; }
-    public DateTime? PfDataAlteracaoPrecoVendaEcommerce { get; set; }
-    public string? PfEncarteClienteSempre { get; set; }
 
     public bool TemPrecoVenda => PrcVenda is > 0;
     public bool TemPromocao => PrcProm is > 0;
@@ -167,37 +153,35 @@ public class ItemCalculado
     public decimal? MbePrcVen { get; init; }
 }
 
-// [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Valores FINAIS de cada coluna do UPDATE gigante.
-// O banco apenas grava; todos os CASE/ISNULL/"ELSE pf.coluna" foram resolvidos em C#.
+// [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Valores que o UPDATE gigante da procedure grava.
+// TemVenda / TemPromocao / Ecommerce dizem em quais UPDATEs o produto entra; quem não entra não tem a coluna alterada.
 public class ProdutoFilialAtualizacao
 {
     public int FilialId { get; set; }
     public int ProdutoId { get; set; }
-    public decimal? PrecoVenda { get; set; }
+
+    public bool TemVenda { get; set; }      // BOPD_VL_PRCVENDA > 0
+    public bool TemPromocao { get; set; }   // BOPD_VL_PRCPROM > 0
+    public bool Ecommerce { get; set; }     // ATUALIZAR_PRECO_ECOMMERCE = 1
+
+    public decimal? PrecoVenda { get; set; }   // PRECO_VENDA_CALC (já arredondado)
     public decimal? Preco3 { get; set; }
     public decimal? Preco6 { get; set; }
-    public decimal? Preco9 { get; set; }
+    public decimal? Preco9 { get; set; }       // PRECO9_CALC
     public decimal? MbePrcVen { get; set; }
-    public decimal? MbePreco9 { get; set; }
+    public decimal? MbePreco9 { get; set; }    // MARGEM_PRECO9
     public decimal? MargemVendaPrecificacao { get; set; }
-    public decimal? MargAntPmc { get; set; }
-    public decimal? MargCalPmc { get; set; }
+    public decimal? DescontoEmbutido { get; set; }
     public decimal? PrcProm { get; set; }
     public DateTime? DtIniPrcProm { get; set; }
     public DateTime? DtFimPrcProm { get; set; }
     public decimal? MargemPromocaoPrecificacao { get; set; }
-    public decimal? PrecoVendaEcommerce { get; set; }
-    public decimal? PrecoPromocaoEcommerce { get; set; }
-    public DateTime? DataInicioPromoEcommerce { get; set; }
-    public DateTime? DataFimPromoEcommerce { get; set; }
-    public decimal? MargemVendaMaximoEcommerce { get; set; }
-    public DateTime? DataAtualizacaoBoletimEcommerce { get; set; }
-    public DateTime? DataAlteracaoPrecoVendaEcommerce { get; set; }
     public string? EncarteClienteSempre { get; set; }
-    public DateTime DataUltimaAtualizacao { get; set; } // PRFI_DT_ULTAPRCVEN / PRFI_DH_ULTATUBOLE
+    public DateTime DataUltimaAtualizacao { get; set; } // GETDATE() da execução
 }
 
-// [MIGRAÇÃO DA PROCEDURE - FASE 4.2/4.3/4.4]: Valores finais para os UPDATEs de Farmácia Popular / Acordo.
+// [MIGRAÇÃO DA PROCEDURE - FASE 4.2/4.3/4.4]: Valores dos UPDATEs de Farmácia Popular / Acordo.
+// Valor null = o boletim não trouxe o dado, então a coluna fica como está.
 public class PrecoFarmaciaPopularAtualizacao
 {
     public int FilialId { get; set; }
@@ -211,10 +195,10 @@ public class PromocaoAcordoAtualizacao
 {
     public int FilialId { get; set; }
     public int ProdutoId { get; set; }
-    public decimal? PrcProm { get; set; }
+    public decimal? PrcProm { get; set; }        // null quando o item não tem promoção
     public DateTime? DtIniPrcProm { get; set; }
     public DateTime? DtFimPrcProm { get; set; }
-    public decimal? Preco1 { get; set; }
+    public decimal? Preco1 { get; set; }         // null = não veio; 0 = limpa o PRECO1
     public DateTime DataUltimaAtualizacao { get; set; }
 }
 

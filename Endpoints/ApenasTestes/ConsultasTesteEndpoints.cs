@@ -17,7 +17,7 @@ public static class ConsultasTesteEndpoints
 
         // Cabeçalho, tipo de custo e itens do boletim para a filial, sem processar nada
         grupo.MapGet("/boletins/{boletimId:int}",
-            async (int boletimId, int filialId, IDbConnectionFactory factory, IBoletimRepository repo) =>
+            async (int boletimId, int filialId, IDbConnectionFactory factory, IBoletimRepository repo, IConsultaTesteRepository consultaRepo) =>
             {
                 if (filialId <= 0 || boletimId <= 0)
                     return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
@@ -34,7 +34,7 @@ public static class ConsultasTesteEndpoints
                     FilialId = filialId,
                     Cabecalho = cab,
                     TipoCusto = await repo.ObterTipoCustoAsync(conn, null),
-                    Itens = await repo.ObterItensAsync(conn, null, filialId, boletimId)
+                    Itens = await consultaRepo.ObterItensBoletimAsync(conn, null, filialId, boletimId)
                 });
             })
             .WithName("TesteConsultarBoletim");
