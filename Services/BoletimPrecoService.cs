@@ -5,9 +5,6 @@ using System.Data;
 
 namespace PrecificacaoPoc.Services;
 
-/// <summary>
-/// Orquestrador: reimplementa em C# o fluxo completo da sp_CsmPrecoAtlzBoletim (Fases 1 a 6).
-/// </summary>
 public class BoletimPrecoService(
     IDbConnectionFactory connectionFactory,
     IBoletimRepository repo,
@@ -16,14 +13,17 @@ public class BoletimPrecoService(
     ILogger<BoletimPrecoService> log)
 {
     private const string ProcessoGenericosIa = "GENERICOS IA";
-    private const string ProcessoFarmaciaExclusao = "Farmacia Popular - exclusao";
-    private const string ProcessoFarmaciaAlteracao = "Farmacia Popular - alteracao";
+    private const string ProcessoFarmaciaExclusao = "FARMACIA POPULAR - EXCLUSAO";
+    private const string ProcessoFarmaciaAlteracao = "FARMACIA POPULAR - ALTERACAO";
 
     // Entrada a partir do objeto do boletim (saída do PriceBulletinMapper). Cab e itens já trazem tudo o que a procedure lia de
     // BOLETIM_PRECO_CAB/DET; o que falta é o estado atual de PRODUTO_FILIAL/PRODUTO_MESTRE de cada produto na filial
     // (custos, preços atuais, monitorado), buscado aqui.
     public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, BoletimCabecalho cab, List<ItemBoletim> boletim, int usuarioId, bool simularApenas)
     {
+        if (cab.ProcessoGeradorNormalizado == ProcessoGenericosIa)
+            return await ProcessarAsync(filialId, cab, boletim, usuarioId, simularApenas);
+
         List<ItemBoletim> itens;
         using (var conn = connectionFactory.Criar())
         {
@@ -72,7 +72,7 @@ public class BoletimPrecoService(
         var tipoCusto = (TipoCusto)tipoCustoChar.Value;
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 2]: Desvio condicional quando o processo gerador for 'GENERICOS IA'
-        if (cab.ProcessoGerador == ProcessoGenericosIa)
+        if (cab.ProcessoGeradorNormalizado == ProcessoGenericosIa)
         {
             int ret = await regrasSempre.AtualizarGenericosIaAsync(conn, txSim, cab.Id, filialId, usuarioId);
             resultado.Observacoes.Add("Processo GENERICOS IA: delegado integralmente à sp_AtualizaPrecoVendaGenericosEstruturaSempre (fluxo da procedure original).");
@@ -115,7 +115,7 @@ public class BoletimPrecoService(
             await repo.AtualizarProdutoFilialAsync(conn, tx, lote41);
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão
-            if (cab.ProcessoGerador == ProcessoFarmaciaExclusao)
+            if (cab.ProcessoGeradorNormalizado == ProcessoFarmaciaExclusao)
             {
                 var atualizacoes = itens
                  .Select(item => AtualizacaoProdutoFilialBuilder.FarmaciaExclusao(item, filialId, agora))
@@ -125,7 +125,7 @@ public class BoletimPrecoService(
             }
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração
-            if (cab.ProcessoGerador == ProcessoFarmaciaAlteracao)
+            if (cab.ProcessoGeradorNormalizado == ProcessoFarmaciaAlteracao)
             {
                 var atualizacoes = itens
                     .Select(item => AtualizacaoProdutoFilialBuilder.FarmaciaAlteracao(item, filialId, agora))
@@ -137,8 +137,10 @@ public class BoletimPrecoService(
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo
             if (cab.ProdutosAcordo == true)
             {
+                var atualizadoPorProduto = lote41.ToDictionary(a => a.ProdutoId);
                 var atualizacoes = itens
-                    .Select(item => AtualizacaoProdutoFilialBuilder.Acordo(item, cab, filialId, agora))
+                    .Select(item => AtualizacaoProdutoFilialBuilder.Acordo(
+                        item, cab, filialId, agora, atualizadoPorProduto.GetValueOrDefault(item.ProdutoId)))
                     .ToList();
 
                 await repo.AtualizarProdutosAcordoAsync(conn, tx, atualizacoes);

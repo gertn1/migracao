@@ -87,7 +87,7 @@ public class BoletimRepository : IBoletimRepository
                    d.PERCENTUAL_DESCONTO_EMBUTIDO     AS DescontoEmbutido,
                    d.PRECO_MAXIMO_CONSUMIDOR          AS PrecoMaximoConsumidor,
                    d.ENCARTE_CLIENTE_SEMPRE           AS EncarteClienteSempre,
-                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 ELSE 0 END AS Monitorado,
+                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 WHEN pm.PRME_FL_MONITORADO = 'N' THEN 0 END AS Monitorado,
                    pf.PRFI_VL_UCG                     AS PfUcg,
                    pf.PRFI_VL_CMPG                    AS PfCmpg,
                    pf.PRFI_VL_PRCMAXCONS              AS PfPrcMaxCons,
@@ -135,12 +135,22 @@ public class BoletimRepository : IBoletimRepository
     public async Task<List<ItemBoletim>> ObterEstadoProdutoFilialAsync(
         IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, IEnumerable<int> produtoIds)
     {
-        var ids = produtoIds.Distinct().ToList();
-        if (ids.Count == 0) return new List<ItemBoletim>();
+        var resultado = new List<ItemBoletim>();
+
+        // Dapper expande IN @ids em um parâmetro por id e o SQL Server aceita no máximo 2100 -> consulta em blocos
+        foreach (var ids in produtoIds.Distinct().Chunk(1000))
+            resultado.AddRange(await ObterEstadoProdutoFilialLoteAsync(c, tx, filialId, boletimId, ids));
+
+        return resultado;
+    }
+
+    private static async Task<IEnumerable<ItemBoletim>> ObterEstadoProdutoFilialLoteAsync(
+        IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, int[] ids)
+    {
 
         const string sql = @"
             SELECT pf.PRME_CD_PRODUTO                 AS ProdutoId,
-                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 ELSE 0 END AS Monitorado,
+                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 WHEN pm.PRME_FL_MONITORADO = 'N' THEN 0 END AS Monitorado,
                    pf.PRFI_VL_UCG                     AS PfUcg,
                    pf.PRFI_VL_CMPG                    AS PfCmpg,
                    pf.PRFI_VL_PRCMAXCONS              AS PfPrcMaxCons,
@@ -178,7 +188,7 @@ public class BoletimRepository : IBoletimRepository
                     AND fp.StoreId = @filialId
                     AND fp.ProductId = pf.PRME_CD_PRODUTO)";
 
-        return (await c.QueryAsync<ItemBoletim>(sql, new { filialId, boletimId, ids }, tx)).AsList();
+        return await c.QueryAsync<ItemBoletim>(sql, new { filialId, boletimId, ids }, tx);
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Substituição do UPDATE gigante da procedure por comando em lote via Dapper.

@@ -120,7 +120,8 @@ public class ItemBoletim
     public string? EncarteClienteSempre { get; set; }
 
     // PRODUTO_MESTRE
-    public bool Monitorado { get; set; } // PRME_FL_MONITORADO = 'S'
+    // PRME_FL_MONITORADO: true = 'S', false = 'N', null = qualquer outro valor (o CASE da procedure cai no ELSE -> mantém o Preço 9 atual)
+    public bool? Monitorado { get; set; }
 
     // PRODUTO_FILIAL (estado atual)
     public decimal? PfUcg { get; set; }

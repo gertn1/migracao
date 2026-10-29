@@ -37,10 +37,11 @@ public static class PrecoCalculator
         decimal preco9Atual = i.PfPreco9 ?? 0m;                        // ISNULL(PRFI_VL_PRECO9, 0)
 
         decimal bruto;
-        if (i.Monitorado && pmc > 0 && pmc != preco9Atual) bruto = pmc;     // monitorado com PMC novo
-        else if (i.Monitorado && pmc == 0) bruto = venda * 1.05m;           // monitorado sem PMC -> +5%
-        else if (i.Monitorado) bruto = preco9Atual;                         // monitorado, PMC == Preço 9 atual
-        else bruto = venda * 1.05m;                                         // não monitorado -> +5%
+        if (i.Monitorado == true && pmc > 0 && pmc != preco9Atual) bruto = pmc;     // monitorado com PMC novo
+        else if (i.Monitorado == true && pmc == 0) bruto = venda * 1.05m;           // monitorado sem PMC -> +5%
+        else if (i.Monitorado == true) bruto = preco9Atual;                         // monitorado, PMC == Preço 9 atual
+        else if (i.Monitorado == false) bruto = venda * 1.05m;                      // não monitorado ('N') -> +5%
+        else bruto = preco9Atual;                                                   // flag diferente de 'S'/'N' -> ELSE da procedure
 
         return Truncar(bruto, 2);
     }

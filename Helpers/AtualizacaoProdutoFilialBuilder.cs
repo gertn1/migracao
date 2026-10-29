@@ -94,14 +94,29 @@ public static class AtualizacaoProdutoFilialBuilder
     };
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo
-    public static PromocaoAcordoAtualizacao Acordo(ItemBoletim i, BoletimCabecalho cab, int filialId, DateTime agora) => new()
+    // atualizado4_1 = linha montada na 4.1 (null se o item não entrou no UPDATE). Preço 1 atual considera 4.2/4.3 (mesmo processo gerador).
+    public static PromocaoAcordoAtualizacao Acordo(ItemBoletim i, BoletimCabecalho cab, int filialId, DateTime agora, ProdutoFilialAtualizacao? atualizado4_1)
     {
-        FilialId = filialId,
-        ProdutoId = i.ProdutoId,
-        PrcProm = i.TemPromocao ? i.PrcProm : i.PfPrcProm,
-        DtIniPrcProm = cab.DtInicioPromocao ?? i.PfDtIniPrcProm,
-        DtFimPrcProm = cab.DtFimPromocao ?? i.PfDtFimPrcProm,
-        Preco1 = i.PrcVenda1 is null ? i.PfPreco1 : (i.PrcVenda1 == 0 ? null : i.PrcVenda1),
-        DataUltimaAtualizacao = agora
-    };
+        decimal? prcPromAtual = atualizado4_1 is null ? i.PfPrcProm : atualizado4_1.PrcProm;
+        DateTime? dtIniAtual = atualizado4_1 is null ? i.PfDtIniPrcProm : atualizado4_1.DtIniPrcProm;
+        DateTime? dtFimAtual = atualizado4_1 is null ? i.PfDtFimPrcProm : atualizado4_1.DtFimPrcProm;
+
+        decimal? preco1Atual = cab.ProcessoGeradorNormalizado switch
+        {
+            "FARMACIA POPULAR - EXCLUSAO" => null,
+            "FARMACIA POPULAR - ALTERACAO" => i.PrcVenda1 ?? i.PfPreco1,
+            _ => i.PfPreco1
+        };
+
+        return new()
+        {
+            FilialId = filialId,
+            ProdutoId = i.ProdutoId,
+            PrcProm = i.TemPromocao ? i.PrcProm : prcPromAtual,
+            DtIniPrcProm = cab.DtInicioPromocao ?? dtIniAtual,
+            DtFimPrcProm = cab.DtFimPromocao ?? dtFimAtual,
+            Preco1 = i.PrcVenda1 is null ? preco1Atual : (i.PrcVenda1 == 0 ? null : i.PrcVenda1),
+            DataUltimaAtualizacao = agora
+        };
+    }
 }
