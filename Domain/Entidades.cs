@@ -73,7 +73,9 @@ public enum RetornoProcessamento
     /// Código 10: Falha no INSERT da tabela cosmosfl..DESC_CATEG_CLIENTE (ou DELETE de finalizadores no fluxo 'ED').
     /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec.
     /// </summary>
-    ErroCategoriasOuDeleteFinalizadoresRegrasSempre = 10
+    ErroCategoriasOuDeleteFinalizadoresRegrasSempre = 10,
+
+    ItensNaoEncontrados
 }
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 1]: PARAMETRO_PRECO.PAPR_TP_CUSTOPV ('U','C','M') -> enum.

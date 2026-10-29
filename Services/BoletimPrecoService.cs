@@ -89,7 +89,7 @@ public class BoletimPrecoService(
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 3]: Materialização dos itens + cálculos inline (substitui CURSOR + #BoletimCalc)
         resultado.TotalItensLidos = itens.Count;
-        if (itens.Count == 0) return RetornoProcessamento.Sucesso;
+        if (itens.Count == 0) return RetornoProcessamento.ItensNaoEncontrados;
 
         // Verifica se BoletimProfimetrics é iagual a 'N'"e @regBOPC_NM_PROCESSGER =/= 'MANUAL' (ou seja, se deve arredondar ou não)
         var agora = DateTime.Now;
