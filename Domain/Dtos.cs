@@ -8,11 +8,11 @@ namespace PrecificacaoPoc.Domain;
 public record ProcessarBoletimRequest(
     int UsuarioId, PriceBulletinCab Cab, List<PriceBulletinDet> Det, List<PriceBulletinEnv> Env);
 
-// Comparativo por item devolvido ao chamador (antes x depois)
+// Comparativo por item devolvido ao chamador: os valores gravados (null = o boletim não alterou o dado)
+// e o Preço 9 anterior. Para comparar com o estado completo, use os endpoints de /api/testes.
 public class ItemComparativo
 {
     public int ProdutoId { get; set; }
-    public decimal? PrecoVendaAnterior { get; set; }
     public decimal? NovoPrecoVenda { get; set; }
     public decimal? Preco9Anterior { get; set; }
     public decimal? NovoPreco9 { get; set; }

@@ -27,21 +27,21 @@ public static class PrecoCalculator
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Substituição do cálculo inline do Preço 9 (+5% ou PMC) para método C#
     // Equivale a CONVERT(NUMERIC(12,2), ROUND(<CASE>, 2, 2)) -> o 3º argumento "2" do ROUND SQL TRUNCA (não arredonda).
-    public static decimal? CalcularPreco9(ItemBoletim i)
+    public static decimal? CalcularPreco9(ItemBoletim i, EstadoProdutoFilial estado)
     {
         // SQL: CASE WHEN BOPD_VL_PRCVENDA IS NOT NULL AND > 0 ... sem ELSE -> NULL quando venda é NULL ou <= 0
         if (i.PrcVenda is null or <= 0) return null;
 
         decimal venda = ArredondarNumeric(i.PrcVenda!.Value, 2);       // normalizado.BOPD_VL_PRCVENDA NUMERIC(12,2)
-        decimal pmc = i.PfPrcMaxCons ?? 0m;                            // ISNULL(PRFI_VL_PRCMAXCONS, 0)
-        decimal preco9Atual = i.PfPreco9 ?? 0m;                        // ISNULL(PRFI_VL_PRECO9, 0)
+        decimal pmc = estado.PrcMaxCons ?? 0m;                         // ISNULL(PRFI_VL_PRCMAXCONS, 0)
+        decimal preco9Atual = estado.Preco9 ?? 0m;                     // ISNULL(PRFI_VL_PRECO9, 0)
 
         decimal bruto;
-        if (i.Monitorado == true && pmc > 0 && pmc != preco9Atual) bruto = pmc;     // monitorado com PMC novo
-        else if (i.Monitorado == true && pmc == 0) bruto = venda * 1.05m;           // monitorado sem PMC -> +5%
-        else if (i.Monitorado == true) bruto = preco9Atual;                         // monitorado, PMC == Preço 9 atual
-        else if (i.Monitorado == false) bruto = venda * 1.05m;                      // não monitorado ('N') -> +5%
-        else bruto = preco9Atual;                                                   // flag diferente de 'S'/'N' -> ELSE da procedure
+        if (estado.Monitorado == true && pmc > 0 && pmc != preco9Atual) bruto = pmc;     // monitorado com PMC novo
+        else if (estado.Monitorado == true && pmc == 0) bruto = venda * 1.05m;           // monitorado sem PMC -> +5%
+        else if (estado.Monitorado == true) bruto = preco9Atual;                         // monitorado, PMC == Preço 9 atual
+        else if (estado.Monitorado == false) bruto = venda * 1.05m;                      // não monitorado ('N') -> +5%
+        else bruto = preco9Atual;                                                        // flag diferente de 'S'/'N' -> ELSE da procedure
 
         return Truncar(bruto, 2);
     }

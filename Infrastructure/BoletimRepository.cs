@@ -70,35 +70,30 @@ public class BoletimRepository : IBoletimRepository
         return string.IsNullOrEmpty(valor) ? null : valor[0];
     }
 
-    // Estado atual de PRODUTO_FILIAL/PRODUTO_MESTRE dos produtos de um Det já em memória (os preços do boletim vêm do objeto, não do banco).
+    // Estado de PRODUTO_FILIAL/PRODUTO_MESTRE dos produtos do boletim (os preços do boletim vêm do objeto em memória, não do banco).
+    // Só volta quem existe nas duas tabelas e não está em FUTURO_PRECO_DUPLICADO: é o INNER JOIN / NOT EXISTS da procedure.
     // Mantém o filtro NOT EXISTS (FUTURO_PRECO_DUPLICADO) da carga original.
-    public async Task<List<ItemBoletim>> ObterEstadoProdutoFilialAsync(
-        IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, IEnumerable<int> produtoIds)
+    public async Task<List<EstadoProdutoFilial>> ObterEstadoProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, IEnumerable<int> produtoIds)
     {
-        var resultado = new List<ItemBoletim>();
+        var resultado = new List<EstadoProdutoFilial>();
 
-        // Dapper expande IN @ids em um parâmetro por id e o SQL Server aceita no máximo 2100 -> consulta em blocos
         foreach (var ids in produtoIds.Distinct().Chunk(1000))
             resultado.AddRange(await ObterEstadoProdutoFilialLoteAsync(c, tx, filialId, boletimId, ids));
 
         return resultado;
     }
 
-    private static async Task<IEnumerable<ItemBoletim>> ObterEstadoProdutoFilialLoteAsync(
+    private static async Task<IEnumerable<EstadoProdutoFilial>> ObterEstadoProdutoFilialLoteAsync(
         IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, int[] ids)
     {
 
         const string sql = @"
             SELECT pf.PRME_CD_PRODUTO                 AS ProdutoId,
                    CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 WHEN pm.PRME_FL_MONITORADO = 'N' THEN 0 END AS Monitorado,
-                   pf.PRFI_VL_UCG                     AS PfUcg,
-                   pf.PRFI_VL_CMPG                    AS PfCmpg,
-                   pf.PRFI_VL_PRCMAXCONS              AS PfPrcMaxCons,
-                   pf.PRFI_VL_PRECOVENDA              AS PfPrecoVenda,
-                   pf.PRFI_VL_PRECO9                  AS PfPreco9,
-                   pf.PRFI_PR_MBEPRCVEN               AS PfMbePrcVen,
-                   pf.PRFI_PR_MBEPRECO9               AS PfMbePreco9,
-                   pf.PRFI_VL_PRCPROM                 AS PfPrcProm
+                   pf.PRFI_VL_UCG                     AS Ucg,
+                   pf.PRFI_VL_CMPG                    AS Cmpg,
+                   pf.PRFI_VL_PRCMAXCONS              AS PrcMaxCons,
+                   pf.PRFI_VL_PRECO9                  AS Preco9
             FROM PRODUTO_FILIAL pf WITH (NOLOCK)
             INNER JOIN PRODUTO_MESTRE pm WITH (NOLOCK)
                 ON pm.PRME_CD_PRODUTO = pf.PRME_CD_PRODUTO
@@ -110,7 +105,7 @@ public class BoletimRepository : IBoletimRepository
                     AND fp.StoreId = @filialId
                     AND fp.ProductId = pf.PRME_CD_PRODUTO)";
 
-        return await c.QueryAsync<ItemBoletim>(sql, new { filialId, boletimId, ids }, tx);
+        return await c.QueryAsync<EstadoProdutoFilial>(sql, new { filialId, boletimId, ids }, tx);
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: o UPDATE gigante da procedure vira vários UPDATEs pequenos, um por assunto.

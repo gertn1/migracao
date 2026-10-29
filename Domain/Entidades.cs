@@ -99,14 +99,12 @@ public class BoletimCabecalho
     public string ProcessoGeradorNormalizado => (ProcessoGerador ?? "").Trim().ToUpperInvariant();
 }
 
-// [MIGRAÇÃO DA PROCEDURE - FASE 3]: Uma linha da #BoletimCalc ANTES dos cálculos (apenas dados crus lidos do banco).
-// Prefixo "Pf" = valor atual em PRODUTO_FILIAL. Só se lê o que os cálculos e o comparativo precisam;
-// o que o boletim não altera simplesmente não entra nos UPDATEs (ver BoletimRepository.AtualizarProdutoFilialAsync).
+// [MIGRAÇÃO DA PROCEDURE - FASE 3]: Colunas BOPD_* da #BoletimCalc: só o que veio do boletim (BOLETIM_PRECO_DET),
+// já na precisão das colunas da #BoletimCalc (ver PriceBulletinMapper.ParaItens).
 public class ItemBoletim
 {
     public int ProdutoId { get; set; }
 
-    // BOLETIM_PRECO_DET
     public decimal? PrcVenda { get; set; }
 
     public decimal? PrcProm { get; set; }
@@ -119,33 +117,33 @@ public class ItemBoletim
     public decimal? DescontoEmbutido { get; set; }
     public decimal? PrecoMaximoConsumidor { get; set; }
     public string? EncarteClienteSempre { get; set; }
-
-    // PRODUTO_MESTRE
-    // PRME_FL_MONITORADO: true = 'S', false = 'N', null = qualquer outro valor (o CASE da procedure cai no ELSE -> mantém o Preço 9 atual)
-    public bool? Monitorado { get; set; }
-
-    // PRODUTO_FILIAL (estado atual) - usados nos cálculos da Fase 3
-    public decimal? PfUcg { get; set; }
-
-    public decimal? PfCmpg { get; set; }
-    public decimal? PfPrcMaxCons { get; set; }
-    public decimal? PfPreco9 { get; set; }
-
-    // PRODUTO_FILIAL (estado atual) - usados só no comparativo (antes x depois) devolvido pela API
-    public decimal? PfPrecoVenda { get; set; }
-
-    public decimal? PfMbePrcVen { get; set; }
-    public decimal? PfMbePreco9 { get; set; }
-    public decimal? PfPrcProm { get; set; }
-
     public bool TemPrecoVenda => PrcVenda is > 0;
     public bool TemPromocao => PrcProm is > 0;
 }
+
+// [MIGRAÇÃO DA PROCEDURE - FASE 3]: O que os JOINs com PRODUTO_FILIAL / PRODUTO_MESTRE trazem para os cálculos.
+// É só o que o cálculo precisa: o resto de PRODUTO_FILIAL não é lido, porque o boletim só grava nas colunas que altera.
+public class EstadoProdutoFilial
+{
+    public int ProdutoId { get; set; }
+
+    // PRODUTO_MESTRE.PRME_FL_MONITORADO: true = 'S', false = 'N', null = qualquer outro valor (o CASE da procedure cai no ELSE -> mantém o Preço 9 atual)
+    public bool? Monitorado { get; set; }
+
+    public decimal? Ucg { get; set; }         // PRFI_VL_UCG
+    public decimal? Cmpg { get; set; }        // PRFI_VL_CMPG
+    public decimal? PrcMaxCons { get; set; }  // PRFI_VL_PRCMAXCONS
+    public decimal? Preco9 { get; set; }      // PRFI_VL_PRECO9 (atual)
+}
+
+// Uma linha da #BoletimCalc antes dos cálculos: item do boletim + estado do produto na filial (resultado do JOIN da Fase 3).
+public record ItemComEstado(ItemBoletim Item, EstadoProdutoFilial Estado);
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Colunas calculadas da #BoletimCalc (PRECO_VENDA_CALC, PRECO9_CALC, MARGEM_PRECO9, MBE_PRCVEN, FL_ARREDONDA).
 public class ItemCalculado
 {
     public ItemBoletim Item { get; init; }
+    public EstadoProdutoFilial Estado { get; init; }
     public bool Arredonda { get; init; }
     public decimal? PrecoVendaCalc { get; init; }
     public decimal? Preco9Calc { get; init; }
