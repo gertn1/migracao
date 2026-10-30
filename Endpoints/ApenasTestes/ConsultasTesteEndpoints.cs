@@ -15,27 +15,20 @@ public static class ConsultasTesteEndpoints
     {
         var grupo = app.MapGroup("/api/testes").WithTags("APENAS TESTES (não usar em produção)");
 
-        // Cabeçalho, tipo de custo e itens do boletim para a filial, sem processar nada
+        // O boletim completo (cab, det e env) como está nas tabelas, sem processar nada e sem PRODUTO_FILIAL
         grupo.MapGet("/boletins/{boletimId:int}",
-            async (int boletimId, int filialId, IDbConnectionFactory factory, IBoletimRepository repo, IConsultaTesteRepository consultaRepo) =>
+            async (int boletimId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
             {
-                if (filialId <= 0 || boletimId <= 0)
-                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+                if (boletimId <= 0)
+                    return Results.BadRequest(new { erro = "boletimId deve ser maior que zero." });
 
                 using var conn = factory.Criar();
                 conn.Open();
 
-                var cab = await repo.ObterCabecalhoAsync(conn, null, boletimId);
-                if (cab is null) return Results.NotFound(new { erro = $"Boletim {boletimId} não existe (retorno 1)." });
-
-                return Results.Ok(new ConsultaBoletimResposta
-                {
-                    BoletimId = boletimId,
-                    FilialId = filialId,
-                    Cabecalho = cab,
-                    TipoCusto = await repo.ObterTipoCustoAsync(conn, null),
-                    Itens = await consultaRepo.ObterItensBoletimAsync(conn, null, filialId, boletimId)
-                });
+                var boletim = await repo.ObterBoletimCompletoAsync(conn, null, boletimId);
+                return boletim is null
+                    ? Results.NotFound(new { erro = $"Boletim {boletimId} não existe (retorno 1)." })
+                    : Results.Ok(boletim);
             })
             .WithName("TesteConsultarBoletim");
 
@@ -78,19 +71,25 @@ public static class ConsultasTesteEndpoints
             })
             .WithName("TesteStatusGenericosIa");
 
-        // Estado atual do produto na filial, para comparar antes/depois
-        grupo.MapGet("/produto-filial/{filialId:int}/{produtoId:int}",
-            async (int filialId, int produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
+        // Estado atual dos produtos do boletim em PRODUTO_FILIAL, para comparar antes/depois de processar (produtoId opcional)
+        grupo.MapGet("/produto-filial",
+            async (int filialId, int boletimId, int? produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
             {
+                if (filialId <= 0 || boletimId <= 0)
+                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+
                 using var conn = factory.Criar();
                 conn.Open();
 
-                var atual = await repo.ObterProdutoFilialAsync(conn, null, filialId, produtoId);
-                return atual is null
-                    ? Results.NotFound(new { erro = $"Produto {produtoId} não encontrado na filial {filialId}." })
-                    : Results.Ok(atual);
+                var produtos = await repo.ObterProdutoFilialDoBoletimAsync(conn, null, filialId, boletimId, produtoId);
+                return Results.Ok(new ProdutoFilialBoletimRespostaTeste
+                {
+                    BoletimId = boletimId,
+                    FilialId = filialId,
+                    Produtos = produtos
+                });
             })
-            .WithName("TesteConsultarProdutoFilial");
+            .WithName("TesteConsultarProdutoFilialDoBoletim");
 
         return app;
     }
