@@ -251,9 +251,9 @@ public class BoletimPrecoService(
 
     private static ItemComparativo ParaComparativo(ItemCalculado c, ProdutoFilialAtualizacao? u) => new()
     {
-        PRME_CD_PRODUTO_productId = c.Item.BOPD_CD_PRODUTO,
-        PRFI_VL_PRECOVENDA_salePrice = c.Item.BOPD_VL_PRCVENDA,
-        PRFI_VL_PRCPROM_promotionalPrice = c.Item.BOPD_VL_PRCPROM,
+        PRME_CD_PRODUTO_BOPD_CD_PRODUTO_productId = c.Item.BOPD_CD_PRODUTO,
+        PRFI_VL_PRECOVENDA_BOPD_VL_PRCVENDA_salePrice = c.Item.BOPD_VL_PRCVENDA,
+        PRFI_VL_PRCPROM_BOPD_VL_PRCPROM_promotionalPrice = c.Item.BOPD_VL_PRCPROM,
         PRME_CD_PRODUTO = c.Item.BOPD_CD_PRODUTO,
         // Só vêm preenchidos os valores que o UPDATE grava; null = o boletim não alterou aquele dado
         PRFI_VL_PRECOVENDA = u?.PRFI_VL_PRECOVENDA,

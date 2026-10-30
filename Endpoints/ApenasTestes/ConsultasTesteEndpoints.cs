@@ -48,9 +48,9 @@ public static class ConsultasTesteEndpoints
                 var itens = await repo.ObterStatusGenericosIaAsync(conn, null, filialId, boletimId);
                 foreach (var i in itens)
                     i.PrecoAplicado = !i.Duplicado
-                        && i.BOPD_VL_PRCVENDA is > 0
-                        && i.PRFI_VL_PRECOVENDA == i.BOPD_VL_PRCVENDA
-                        && i.PRFI_VL_PRECO3 == i.BOPD_VL_PRCVENDA3;
+                        && i.BOPD_VL_PRCVENDA_salePrice is > 0
+                        && i.PRFI_VL_PRECOVENDA == i.BOPD_VL_PRCVENDA_salePrice
+                        && i.PRFI_VL_PRECO3 == i.BOPD_VL_PRCVENDA3_semprePrice;
 
                 var considerados = itens.Where(i => !i.Duplicado).ToList();
                 var aplicados = considerados.Count(i => i.PrecoAplicado);
@@ -90,6 +90,23 @@ public static class ConsultasTesteEndpoints
                 });
             })
             .WithName("TesteConsultarProdutoFilialDoBoletim");
+
+        // JOIN boletim x PRODUTO_FILIAL x PRODUTO_MESTRE: o valor do boletim e o da filial, um embaixo do outro (produtoId opcional)
+        grupo.MapGet("/boletins/{boletimId:int}/comparativo",
+            async (int boletimId, int filialId, int? produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
+            {
+                if (filialId <= 0 || boletimId <= 0)
+                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+
+                using var conn = factory.Criar();
+                conn.Open();
+
+                var itens = await repo.ObterBoletimComProdutoFilialAsync(conn, null, filialId, boletimId, produtoId);
+                return itens.Count == 0
+                    ? Results.NotFound(new { erro = $"Boletim {boletimId} não tem itens (ou o produto não está nele)." })
+                    : Results.Ok(new BoletimComProdutoFilialRespostaTeste { BOPC_SQ_BOLETIM = boletimId, FILI_CD_FILIAL = filialId, Itens = itens });
+            })
+            .WithName("TesteCompararBoletimComProdutoFilial");
 
         return app;
     }
