@@ -186,13 +186,15 @@ public class BoletimPrecoService(
         // [FASE 3]: Substituição do cálculo inline do Preço 9 (+5% ou PMC) para método C#
         decimal? preco9 = PrecoCalculator.CalcularPreco9(i, estado);
 
+        // Preço de venda normalizado uma vez só (CONVERT NUMERIC(12,2)); null quando o boletim não trouxe venda > 0
+        decimal? venda = i.TemPrecoVenda ? PrecoCalculator.ArredondarNumeric(i.BOPD_VL_PRCVENDA!.Value, 2) : null;
+
         // [FASE 3]: Migração da fórmula de Margem MBE com teto em 999.99%
         decimal? margemPreco9 = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemPreco9(preco9, custo) : null; // MARGEM_PRECO9
-        decimal? mbePrcVen = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemMbe(PrecoCalculator.ArredondarNumeric(i.BOPD_VL_PRCVENDA!.Value, 2), custo) : null; // MBE_PRCVEN
+        decimal? mbePrcVen = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemMbe(venda!.Value, custo) : null; // MBE_PRCVEN
 
-        // [FASE 4]: PRECO_VENDA_CALC -> dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1
-        decimal? precoVendaCalc = i.TemPrecoVenda
-            ? (arredonda ? arredondador.Arredondar(i.BOPD_VL_PRCVENDA!.Value, filialId) : PrecoCalculator.ArredondarNumeric(i.BOPD_VL_PRCVENDA!.Value, 2)) : null;
+        // [FASE 4]: PRECO_VENDA_CALC -> dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1; senão o próprio valor normalizado
+        decimal? precoVendaCalc = i.TemPrecoVenda && arredonda ? arredondador.Arredondar(venda!.Value, filialId) : venda;
 
         return new ItemCalculado
         {
