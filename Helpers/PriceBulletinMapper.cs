@@ -5,22 +5,23 @@ namespace PrecificacaoPoc.Helpers;
 
 /// <summary>
 /// Anti-corruption layer: único ponto que conhece os nomes das entidades da aplicação (PriceBulletin*)
-/// e os traduz para o modelo da procedure (BoletimCabecalho / ItemBoletim). É esta classe que será levada para a aplicação real.
+/// e os traduz para o modelo da procedure (BoletimCabecalho / ItemBoletim), cujas propriedades têm o nome das colunas.
+/// É esta classe que será levada para a aplicação real (BoletimWorker).
 /// </summary>
 public static class PriceBulletinMapper
 {
-    private const string FlagSim = "S";
+    private const string FlagNao = "N";
 
     public static BoletimCabecalho ParaCabecalho(PriceBulletinCab cab) => new()
     {
-        Id = cab.Id,                                              // BOPC_SQ_BOLETIM
-        DtInicioPromocao = cab.StartValidity,                     // BOPC_DT_INIPREPRO
-        DtFimPromocao = cab.EndValidity,                          // BOPC_DT_FIMPREPRO
-        ProcessoGerador = cab.ProcessName,                        // BOPC_NM_PROCESSGER
-        Demandtec = cab.DemandtecFlag == FlagSim,                 // BOLETIM_DEMANDTEC = 'S'
-        Profimetrics = cab.ProfimetricsFlag == FlagSim,           // BOLETIM_PROFIMETRICS = 'S'
-        ProdutosAcordo = cab.AgreementProductsFlag == true,       // BOLETIM_PRODUTOS_ACORDO
-        AtualizarPrecoEcommerce = cab.UpdateEcommercePriceFlag == true // ATUALIZAR_PRECO_ECOMMERCE  
+        BOPC_SQ_BOLETIM = cab.Id,
+        BOPC_DT_INIPREPRO = cab.StartValidity,
+        BOPC_DT_FIMPREPRO = cab.EndValidity,
+        BOPC_NM_PROCESSGER = cab.ProcessName,
+        BOLETIM_DEMANDTEC = cab.DemandtecFlag ?? FlagNao,                 // ISNULL(BOLETIM_DEMANDTEC, 'N')
+        BOLETIM_PROFIMETRICS = cab.ProfimetricsFlag ?? FlagNao,           // ISNULL(BOLETIM_PROFIMETRICS, 'N')
+        BOLETIM_PRODUTOS_ACORDO = cab.AgreementProductsFlag == true,      // BOLETIM_PRODUTOS_ACORDO
+        ATUALIZAR_PRECO_ECOMMERCE = cab.UpdateEcommercePriceFlag == true  // ISNULL(ATUALIZAR_PRECO_ECOMMERCE, 0)
     };
 
     // Só os campos vindos do boletim. Os valores são convertidos para a precisão das colunas da #BoletimCalc
@@ -36,18 +37,18 @@ public static class PriceBulletinMapper
 
         return lista.Select(d => new ItemBoletim
         {
-            ProdutoId = d.ProductId,                                                          // BOPD_CD_PRODUTO
-            PrcVenda = ArredondarComoColuna(d.SalePrice, 2),                                  // BOPD_VL_PRCVENDA
-            PrcProm = ArredondarComoColuna(d.PromotionalPrice, 2),                            // BOPD_VL_PRCPROM
-            PrcVenda1 = ArredondarComoColuna(d.TotalPopularPharmacyPrice, 2),                 // BOPD_VL_PRCVENDA1
-            PrcVenda2 = ArredondarComoColuna(d.ParcialPopularPharmacyPrice, 2),               // BOPD_VL_PRCVENDA2
-            PrcVenda3 = ArredondarComoColuna(d.SemprePrice, 2),                               // BOPD_VL_PRCVENDA3
-            PrcVenda6 = ArredondarComoColuna(d.PreviousPrice, 2),                             // BOPD_VL_PRCVENDA6
-            MargemVendaPrecificacao = ArredondarComoColuna(d.SalePricingMargin, 4),           // MARGEM_VENDA_PRECIFICACAO
-            MargemPromocaoPrecificacao = ArredondarComoColuna(d.PromotionPricingMargin, 4),   // MARGEM_PROMOCAO_PRECIFICACAO
-            DescontoEmbutido = ArredondarComoColuna(d.DiscountPercentage, 2),                 // PERCENTUAL_DESCONTO_EMBUTIDO
-            PrecoMaximoConsumidor = ArredondarComoColuna(d.MaximumPrice, 2),                  // PRECO_MAXIMO_CONSUMIDOR
-            EncarteClienteSempre = d.AlwaysCustomerFlyer                                      // ENCARTE_CLIENTE_SEMPRE
+            BOPD_CD_PRODUTO = d.ProductId,
+            BOPD_VL_PRCVENDA = ArredondarComoColuna(d.SalePrice, 2),
+            BOPD_VL_PRCPROM = ArredondarComoColuna(d.PromotionalPrice, 2),
+            BOPD_VL_PRCVENDA1 = ArredondarComoColuna(d.TotalPopularPharmacyPrice, 2),
+            BOPD_VL_PRCVENDA2 = ArredondarComoColuna(d.ParcialPopularPharmacyPrice, 2),
+            BOPD_VL_PRCVENDA3 = ArredondarComoColuna(d.SemprePrice, 2),
+            BOPD_VL_PRCVENDA6 = ArredondarComoColuna(d.PreviousPrice, 2),
+            MARGEM_VENDA_PRECIFICACAO = ArredondarComoColuna(d.SalePricingMargin, 4),
+            MARGEM_PROMOCAO_PRECIFICACAO = ArredondarComoColuna(d.PromotionPricingMargin, 4),
+            PERCENTUAL_DESCONTO_EMBUTIDO = ArredondarComoColuna(d.DiscountPercentage, 2),
+            PRECO_MAXIMO_CONSUMIDOR = ArredondarComoColuna(d.MaximumPrice, 2),
+            ENCARTE_CLIENTE_SEMPRE = d.AlwaysCustomerFlyer
         }).ToList();
     }
 

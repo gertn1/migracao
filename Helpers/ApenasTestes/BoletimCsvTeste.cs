@@ -17,15 +17,15 @@ public static class BoletimCsvTeste
     {
         var cab = boletim.Cab ?? new Dictionary<string, object?>();
         var camposCab = cab.Keys.ToList();
-        var camposDet = MapaColunasBoletimTeste.Det.Values.Where(campo => campo != "bulletinId").ToList(); // bulletinId == cab.id
-        var filiais = string.Join(",", boletim.Env.Select(e => Formatar(Valor(e, "storeId"))));
+        var camposDet = MapaColunasBoletimTeste.Det.Where(c => c.Nome != "BOPC_SQ_BOLETIM").Select(c => c.Chave).ToList(); // igual ao do cab
+        var filiais = string.Join(",", boletim.Env.Select(e => Formatar(Valor(e, "BOPE_CD_FILIAL"))));
 
         var csv = new StringBuilder();
 
-        // Cabeçalho: campo do POST [coluna do banco], para saber de onde vem cada coluna
-        var titulos = camposCab.Select(campo => Titulo(boletim, "cab", campo))
-            .Append("filiais [BOPE_CD_FILIAL]")
-            .Concat(camposDet.Select(campo => Titulo(boletim, "det", campo)));
+        // Cabeçalho: o nome de cada coluna do banco
+        var titulos = camposCab
+            .Append("BOPE_CD_FILIAL")
+            .Concat(camposDet);
         csv.AppendLine(string.Join(Separador, titulos.Select(Escapar)));
 
         foreach (var item in boletim.Det)
@@ -41,9 +41,6 @@ public static class BoletimCsvTeste
 
     private static object? Valor(IDictionary<string, object?> linha, string campo) =>
         linha.TryGetValue(campo, out var valor) ? valor : null;
-
-    private static string Titulo(BoletimCompletoTeste boletim, string tabela, string campo) =>
-        boletim.Colunas[tabela].TryGetValue(campo, out var coluna) ? $"{campo} [{coluna}]" : campo;
 
     private static string Formatar(object? valor) => valor switch
     {

@@ -16,20 +16,19 @@ public class SqlConnectionFactory(IConfiguration config) : IDbConnectionFactory
 /// </summary>
 public class BoletimRepository : IBoletimRepository
 {
-    private const string FlagSim = "S";
-
     // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Validação de existência do boletim e leitura do cabeçalho (BOLETIM_PRECO_CAB)
     // DE-PARA: o "IF @@ROWCOUNT = 0 -> retorno 1" passa a ser "resultado == null" no service.
     public async Task<BoletimCabecalho?> ObterCabecalhoAsync(IDbConnection c, IDbTransaction? tx, int boletimId)
     {
         const string sql = @"
-            SELECT BOPC_DT_INIPREPRO              AS DtInicioPromocao,
-                   BOPC_DT_FIMPREPRO              AS DtFimPromocao,
-                   BOPC_NM_PROCESSGER             AS ProcessoGerador,
-                   BOLETIM_PRODUTOS_ACORDO        AS ProdutosAcordo,
-                   BOLETIM_DEMANDTEC              AS DemandtecRaw,
-                   BOLETIM_PROFIMETRICS           AS ProfimetricsRaw,
-                   ATUALIZAR_PRECO_ECOMMERCE      AS AtualizarPrecoEcommerce
+            SELECT BOPC_SQ_BOLETIM,
+                   BOPC_DT_INIPREPRO,
+                   BOPC_DT_FIMPREPRO,
+                   BOPC_NM_PROCESSGER,
+                   BOLETIM_PRODUTOS_ACORDO,
+                   BOLETIM_DEMANDTEC,
+                   BOLETIM_PROFIMETRICS,
+                   ATUALIZAR_PRECO_ECOMMERCE
             FROM BOLETIM_PRECO_CAB WITH (NOLOCK)
             WHERE BOPC_SQ_BOLETIM = @boletimId";
 
@@ -39,26 +38,27 @@ public class BoletimRepository : IBoletimRepository
         // Os ISNULL(...,'N') / ISNULL(...,0) da procedure viraram tratamento de nulo em C#.
         return new BoletimCabecalho
         {
-            Id = boletimId,
-            DtInicioPromocao = row.DtInicioPromocao,
-            DtFimPromocao = row.DtFimPromocao,
-            ProcessoGerador = row.ProcessoGerador,
-            ProdutosAcordo = row.ProdutosAcordo ?? false,
-            Demandtec = row.DemandtecRaw == FlagSim,
-            Profimetrics = row.ProfimetricsRaw == FlagSim,
-            AtualizarPrecoEcommerce = row.AtualizarPrecoEcommerce ?? false
+            BOPC_SQ_BOLETIM = row.BOPC_SQ_BOLETIM,
+            BOPC_DT_INIPREPRO = row.BOPC_DT_INIPREPRO,
+            BOPC_DT_FIMPREPRO = row.BOPC_DT_FIMPREPRO,
+            BOPC_NM_PROCESSGER = row.BOPC_NM_PROCESSGER,
+            BOLETIM_PRODUTOS_ACORDO = row.BOLETIM_PRODUTOS_ACORDO ?? false,
+            BOLETIM_DEMANDTEC = row.BOLETIM_DEMANDTEC ?? "N",
+            BOLETIM_PROFIMETRICS = row.BOLETIM_PROFIMETRICS ?? "N",
+            ATUALIZAR_PRECO_ECOMMERCE = row.ATUALIZAR_PRECO_ECOMMERCE ?? false
         };
     }
 
     private class CabecalhoRow
     {
-        public DateTime? DtInicioPromocao { get; set; }
-        public DateTime? DtFimPromocao { get; set; }
-        public string? ProcessoGerador { get; set; }
-        public bool? ProdutosAcordo { get; set; }
-        public string? DemandtecRaw { get; set; }
-        public string? ProfimetricsRaw { get; set; }
-        public bool? AtualizarPrecoEcommerce { get; set; }
+        public int BOPC_SQ_BOLETIM { get; set; }
+        public DateTime? BOPC_DT_INIPREPRO { get; set; }
+        public DateTime? BOPC_DT_FIMPREPRO { get; set; }
+        public string? BOPC_NM_PROCESSGER { get; set; }
+        public bool? BOLETIM_PRODUTOS_ACORDO { get; set; }
+        public string? BOLETIM_DEMANDTEC { get; set; }
+        public string? BOLETIM_PROFIMETRICS { get; set; }
+        public bool? ATUALIZAR_PRECO_ECOMMERCE { get; set; }
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Leitura do tipo de custo em PARAMETRO_PRECO (sem linha => retorno 2)
@@ -88,12 +88,12 @@ public class BoletimRepository : IBoletimRepository
     {
 
         const string sql = @"
-            SELECT pf.PRME_CD_PRODUTO                 AS ProdutoId,
-                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 WHEN pm.PRME_FL_MONITORADO = 'N' THEN 0 END AS Monitorado,
-                   pf.PRFI_VL_UCG                     AS Ucg,
-                   pf.PRFI_VL_CMPG                    AS Cmpg,
-                   pf.PRFI_VL_PRCMAXCONS              AS PrcMaxCons,
-                   pf.PRFI_VL_PRECO9                  AS Preco9
+            SELECT pf.PRME_CD_PRODUTO,
+                   pm.PRME_FL_MONITORADO,
+                   pf.PRFI_VL_UCG,
+                   pf.PRFI_VL_CMPG,
+                   pf.PRFI_VL_PRCMAXCONS,
+                   pf.PRFI_VL_PRECO9
             FROM PRODUTO_FILIAL pf WITH (NOLOCK)
             INNER JOIN PRODUTO_MESTRE pm WITH (NOLOCK)
                 ON pm.PRME_CD_PRODUTO = pf.PRME_CD_PRODUTO
@@ -119,14 +119,14 @@ public class BoletimRepository : IBoletimRepository
         // 1) Preço de venda: só quem tem BOPD_VL_PRCVENDA > 0. Preço 3 e margem de venda só trocam se o boletim trouxe valor.
         await ExecutarAsync(c, tx, @"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRECOVENDA = @PrecoVenda,
-                PRFI_VL_PRECO3 = COALESCE(@Preco3, PRFI_VL_PRECO3),
-                PRFI_VL_PRECO6 = @Preco6,
-                PRFI_VL_PRECO9 = @Preco9,
-                PRFI_PR_MBEPRCVEN = @MbePrcVen,
-                PRFI_PR_MBEPRECO9 = @MbePreco9,
-                MARGEM_VENDA_PRECIFICACAO = COALESCE(@MargemVendaPrecificacao, MARGEM_VENDA_PRECIFICACAO)
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
+                PRFI_VL_PRECOVENDA = @PRFI_VL_PRECOVENDA,
+                PRFI_VL_PRECO3 = COALESCE(@PRFI_VL_PRECO3, PRFI_VL_PRECO3),
+                PRFI_VL_PRECO6 = @PRFI_VL_PRECO6,
+                PRFI_VL_PRECO9 = @PRFI_VL_PRECO9,
+                PRFI_PR_MBEPRCVEN = @PRFI_PR_MBEPRCVEN,
+                PRFI_PR_MBEPRECO9 = @PRFI_PR_MBEPRECO9,
+                MARGEM_VENDA_PRECIFICACAO = COALESCE(@MARGEM_VENDA_PRECIFICACAO, MARGEM_VENDA_PRECIFICACAO)
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
             itens.Where(i => i.TemVenda));
 
         // 2) Desconto embutido (PMC): o CAL atual vira o novo ANT e o desconto do boletim vira o novo CAL.
@@ -134,49 +134,49 @@ public class BoletimRepository : IBoletimRepository
         await ExecutarAsync(c, tx, @"
             UPDATE PRODUTO_FILIAL SET
                 PRFI_PR_MARGANTPMC = COALESCE(PRFI_PR_MARGCALPMC, PRFI_PR_MARGANTPMC),
-                PRFI_PR_MARGCALPMC = @DescontoEmbutido
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
-            itens.Where(i => i.TemVenda && i.DescontoEmbutido is not null));
+                PRFI_PR_MARGCALPMC = @PRFI_PR_MARGCALPMC
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
+            itens.Where(i => i.TemVenda && i.PRFI_PR_MARGCALPMC is not null));
 
         // 3) Promoção: só quem tem BOPD_VL_PRCPROM > 0. Margem de promoção e encarte só trocam se o boletim trouxe valor.
         await ExecutarAsync(c, tx, @"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRCPROM = @PrcProm,
-                PRFI_DT_INIPRCPROM = @DtIniPrcProm,
-                PRFI_DT_FIMPRCPROM = @DtFimPrcProm,
-                MARGEM_PROMOCAO_PRECIFICACAO = COALESCE(@MargemPromocaoPrecificacao, MARGEM_PROMOCAO_PRECIFICACAO),
-                ENCARTE_CLIENTE_SEMPRE = COALESCE(@EncarteClienteSempre, ENCARTE_CLIENTE_SEMPRE)
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
+                PRFI_VL_PRCPROM = @PRFI_VL_PRCPROM,
+                PRFI_DT_INIPRCPROM = @PRFI_DT_INIPRCPROM,
+                PRFI_DT_FIMPRCPROM = @PRFI_DT_FIMPRCPROM,
+                MARGEM_PROMOCAO_PRECIFICACAO = COALESCE(@MARGEM_PROMOCAO_PRECIFICACAO, MARGEM_PROMOCAO_PRECIFICACAO),
+                ENCARTE_CLIENTE_SEMPRE = COALESCE(@ENCARTE_CLIENTE_SEMPRE, ENCARTE_CLIENTE_SEMPRE)
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
             itens.Where(i => i.TemPromocao));
 
         // 4) E-commerce - preço de venda (ATUALIZAR_PRECO_ECOMMERCE = 1 e com preço de venda)
         await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET PRECO_VENDA_ECOMMERCE = @PrecoVenda
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
+            UPDATE PRODUTO_FILIAL SET PRECO_VENDA_ECOMMERCE = @PRFI_VL_PRECOVENDA
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
             itens.Where(i => i.Ecommerce && i.TemVenda));
 
         // 5) E-commerce - promoção (ATUALIZAR_PRECO_ECOMMERCE = 1 e com promoção)
         await ExecutarAsync(c, tx, @"
             UPDATE PRODUTO_FILIAL SET
-                PRECO_PROMOCAO_ECOMMERCE = @PrcProm,
-                DATA_INICIO_PROMOCAO_ECOMMERCE = @DtIniPrcProm,
-                DATA_FIM_PROMOCAO_ECOMMERCE = @DtFimPrcProm
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
+                PRECO_PROMOCAO_ECOMMERCE = @PRFI_VL_PRCPROM,
+                DATA_INICIO_PROMOCAO_ECOMMERCE = @PRFI_DT_INIPRCPROM,
+                DATA_FIM_PROMOCAO_ECOMMERCE = @PRFI_DT_FIMPRCPROM
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
             itens.Where(i => i.Ecommerce && i.TemPromocao));
 
         // 6) E-commerce - margem máxima e datas (ATUALIZAR_PRECO_ECOMMERCE = 1, qualquer item). Sem desconto no boletim usa o CAL atual.
         await ExecutarAsync(c, tx, @"
             UPDATE PRODUTO_FILIAL SET
-                MARGEM_VENDA_MAXIMO_ECOMMERCE = COALESCE(@DescontoEmbutido, PRFI_PR_MARGCALPMC),
-                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE = @DataUltimaAtualizacao,
-                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = @DataUltimaAtualizacao
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
+                MARGEM_VENDA_MAXIMO_ECOMMERCE = COALESCE(@PRFI_PR_MARGCALPMC, PRFI_PR_MARGCALPMC),
+                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE = @PRFI_DT_ULTAPRCVEN,
+                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = @PRFI_DT_ULTAPRCVEN
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
             itens.Where(i => i.Ecommerce));
 
         // 7) Auditoria: todo item que entrou na fase 4.1 (venda ou promoção)
         return await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao, PRFI_DH_ULTATUBOLE = @DataUltimaAtualizacao
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
+            UPDATE PRODUTO_FILIAL SET PRFI_DT_ULTAPRCVEN = @PRFI_DT_ULTAPRCVEN, PRFI_DH_ULTATUBOLE = @PRFI_DH_ULTATUBOLE
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
             itens);
     }
 
@@ -192,9 +192,9 @@ public class BoletimRepository : IBoletimRepository
     {
         var itens = lote.AsList();
         await c.ExecuteAsync(@"
-            UPDATE PRODUTO_FILIAL SET PRFI_VL_PRECO1 = NULL, PRFI_VL_PRECO2 = NULL, PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId", itens, tx);
-        await c.ExecuteAsync("DELETE FROM PRODUTO_FARMACIA_POPULAR WHERE CODIGO_PRODUTO = @ProdutoId", itens, tx);
+            UPDATE PRODUTO_FILIAL SET PRFI_VL_PRECO1 = NULL, PRFI_VL_PRECO2 = NULL, PRFI_DT_ULTAPRCVEN = @PRFI_DT_ULTAPRCVEN
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO", itens, tx);
+        await c.ExecuteAsync("DELETE FROM PRODUTO_FARMACIA_POPULAR WHERE CODIGO_PRODUTO = @PRME_CD_PRODUTO", itens, tx);
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração (só troca se o boletim trouxe o preço)
@@ -203,13 +203,13 @@ public class BoletimRepository : IBoletimRepository
         var itens = lote.AsList();
         await c.ExecuteAsync(@"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRECO1 = COALESCE(@Preco1, PRFI_VL_PRECO1),
-                PRFI_VL_PRECO2 = COALESCE(@Preco2, PRFI_VL_PRECO2),
-                PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId", itens, tx);
+                PRFI_VL_PRECO1 = COALESCE(@PRFI_VL_PRECO1, PRFI_VL_PRECO1),
+                PRFI_VL_PRECO2 = COALESCE(@PRFI_VL_PRECO2, PRFI_VL_PRECO2),
+                PRFI_DT_ULTAPRCVEN = @PRFI_DT_ULTAPRCVEN
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO", itens, tx);
         await c.ExecuteAsync(@"
             UPDATE PRODUTO_FARMACIA_POPULAR SET NUMERO_BOLETIM_OPERACAO = NULL, DATA_HORA_OPERACAO_LOGICA = NULL
-            WHERE CODIGO_PRODUTO = @ProdutoId", itens, tx);
+            WHERE CODIGO_PRODUTO = @PRME_CD_PRODUTO", itens, tx);
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo (roda depois de 4.1-4.3, como na procedure)
@@ -220,16 +220,16 @@ public class BoletimRepository : IBoletimRepository
         // Promoção e datas só trocam se vieram (PrcProm é null quando o item não tem promoção)
         await c.ExecuteAsync(@"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRCPROM = COALESCE(@PrcProm, PRFI_VL_PRCPROM),
-                PRFI_DT_INIPRCPROM = COALESCE(@DtIniPrcProm, PRFI_DT_INIPRCPROM),
-                PRFI_DT_FIMPRCPROM = COALESCE(@DtFimPrcProm, PRFI_DT_FIMPRCPROM),
-                PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId", itens, tx);
+                PRFI_VL_PRCPROM = COALESCE(@PRFI_VL_PRCPROM, PRFI_VL_PRCPROM),
+                PRFI_DT_INIPRCPROM = COALESCE(@PRFI_DT_INIPRCPROM, PRFI_DT_INIPRCPROM),
+                PRFI_DT_FIMPRCPROM = COALESCE(@PRFI_DT_FIMPRCPROM, PRFI_DT_FIMPRCPROM),
+                PRFI_DT_ULTAPRCVEN = @PRFI_DT_ULTAPRCVEN
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO", itens, tx);
 
         // Preço 1: só para quem o boletim trouxe; NULLIF(x, 0) transforma 0 em NULL (limpa o preço)
         await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET PRFI_VL_PRECO1 = NULLIF(@Preco1, 0)
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId",
-            itens.Where(i => i.Preco1 is not null));
+            UPDATE PRODUTO_FILIAL SET PRFI_VL_PRECO1 = NULLIF(@PRFI_VL_PRECO1, 0)
+            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
+            itens.Where(i => i.PRFI_VL_PRECO1 is not null));
     }
 }

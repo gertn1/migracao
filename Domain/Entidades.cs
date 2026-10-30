@@ -86,56 +86,58 @@ public enum TipoCusto
     MaiorEntreOsDois = 'M'  // maior entre UCG e CMPG
 }
 
+// Nas classes abaixo (e nos DTOs) as propriedades têm o nome EXATO da coluna do banco (ou da coluna da #BoletimCalc
+// quando o dado só existe dentro da procedure), para que o que é lido, calculado e gravado seja conferido 1 para 1 com as tabelas.
+
 // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Variáveis @reg* lidas de BOLETIM_PRECO_CAB (com os ISNULL já aplicados).
 public class BoletimCabecalho
 {
-    public int Id { get; set; }                       // BOPC_SQ_BOLETIM (PriceBulletinCab.Id)
-    public DateTime? DtInicioPromocao { get; set; }   // @regBOPC_DT_INIPREPRO
-    public DateTime? DtFimPromocao { get; set; }      // @regBOPC_DT_FIMPREPRO
-    public string? ProcessoGerador { get; set; }      // @regBOPC_NM_PROCESSGER
-    public bool ProdutosAcordo { get; set; }          // @regBOLETIM_PRODUTOS_ACORDO
-    public bool Demandtec { get; set; }               // @regBOLETIM_DEMANDTEC = 'S'
-    public bool Profimetrics { get; set; }            // @regBOLETIM_PROFIMETRICS = 'S'
-    public bool AtualizarPrecoEcommerce { get; set; } // @regATUALIZAR_PRECO_ECOMMERCE
+    public int BOPC_SQ_BOLETIM { get; set; }
+    public DateTime? BOPC_DT_INIPREPRO { get; set; }
+    public DateTime? BOPC_DT_FIMPREPRO { get; set; }
+    public string? BOPC_NM_PROCESSGER { get; set; }
+    public bool BOLETIM_PRODUTOS_ACORDO { get; set; }       // ISNULL(...,0) da procedure
+    public string BOLETIM_DEMANDTEC { get; set; } = "N";     // ISNULL(...,'N')
+    public string BOLETIM_PROFIMETRICS { get; set; } = "N";  // ISNULL(...,'N')
+    public bool ATUALIZAR_PRECO_ECOMMERCE { get; set; }      // ISNULL(...,0)
 
-    public string ProcessoGeradorNormalizado => (ProcessoGerador ?? "").Trim().ToUpperInvariant();
+    public bool Demandtec => BOLETIM_DEMANDTEC == "S";
+    public bool Profimetrics => BOLETIM_PROFIMETRICS == "S";
+    public string ProcessoGeradorNormalizado => (BOPC_NM_PROCESSGER ?? "").Trim().ToUpperInvariant();
 }
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Colunas BOPD_* da #BoletimCalc: só o que veio do boletim (BOLETIM_PRECO_DET),
 // já na precisão das colunas da #BoletimCalc (ver PriceBulletinMapper.ParaItens).
 public class ItemBoletim
 {
-    public int ProdutoId { get; set; }
+    public int BOPD_CD_PRODUTO { get; set; }
+    public decimal? BOPD_VL_PRCVENDA { get; set; }
+    public decimal? BOPD_VL_PRCPROM { get; set; }
+    public decimal? BOPD_VL_PRCVENDA1 { get; set; }
+    public decimal? BOPD_VL_PRCVENDA2 { get; set; }
+    public decimal? BOPD_VL_PRCVENDA3 { get; set; }
+    public decimal? BOPD_VL_PRCVENDA6 { get; set; }
+    public decimal? MARGEM_VENDA_PRECIFICACAO { get; set; }
+    public decimal? MARGEM_PROMOCAO_PRECIFICACAO { get; set; }
+    public decimal? PERCENTUAL_DESCONTO_EMBUTIDO { get; set; }  // DESCONTO_EMBUTIDO na #BoletimCalc
+    public decimal? PRECO_MAXIMO_CONSUMIDOR { get; set; }
+    public string? ENCARTE_CLIENTE_SEMPRE { get; set; }
 
-    public decimal? PrcVenda { get; set; }
-
-    public decimal? PrcProm { get; set; }
-    public decimal? PrcVenda1 { get; set; }
-    public decimal? PrcVenda2 { get; set; }
-    public decimal? PrcVenda3 { get; set; }
-    public decimal? PrcVenda6 { get; set; }
-    public decimal? MargemVendaPrecificacao { get; set; }
-    public decimal? MargemPromocaoPrecificacao { get; set; }
-    public decimal? DescontoEmbutido { get; set; }
-    public decimal? PrecoMaximoConsumidor { get; set; }
-    public string? EncarteClienteSempre { get; set; }
-    public bool TemPrecoVenda => PrcVenda is > 0;
-    public bool TemPromocao => PrcProm is > 0;
+    public bool TemPrecoVenda => BOPD_VL_PRCVENDA is > 0;
+    public bool TemPromocao => BOPD_VL_PRCPROM is > 0;
 }
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 3]: O que os JOINs com PRODUTO_FILIAL / PRODUTO_MESTRE trazem para os cálculos.
 // É só o que o cálculo precisa: o resto de PRODUTO_FILIAL não é lido, porque o boletim só grava nas colunas que altera.
 public class EstadoProdutoFilial
 {
-    public int ProdutoId { get; set; }
-
-    // PRODUTO_MESTRE.PRME_FL_MONITORADO: true = 'S', false = 'N', null = qualquer outro valor (o CASE da procedure cai no ELSE -> mantém o Preço 9 atual)
-    public bool? Monitorado { get; set; }
-
-    public decimal? Ucg { get; set; }         // PRFI_VL_UCG
-    public decimal? Cmpg { get; set; }        // PRFI_VL_CMPG
-    public decimal? PrcMaxCons { get; set; }  // PRFI_VL_PRCMAXCONS
-    public decimal? Preco9 { get; set; }      // PRFI_VL_PRECO9 (atual)
+    public int PRME_CD_PRODUTO { get; set; }
+    // PRODUTO_MESTRE: 'S' = monitorado, 'N' = não monitorado; qualquer outro valor/NULL cai no ELSE da procedure (mantém o Preço 9 atual)
+    public string? PRME_FL_MONITORADO { get; set; }
+    public decimal? PRFI_VL_UCG { get; set; }
+    public decimal? PRFI_VL_CMPG { get; set; }
+    public decimal? PRFI_VL_PRCMAXCONS { get; set; }
+    public decimal? PRFI_VL_PRECO9 { get; set; }  // valor atual
 }
 
 // Uma linha da #BoletimCalc antes dos cálculos: item do boletim + estado do produto na filial (resultado do JOIN da Fase 3).
@@ -146,61 +148,61 @@ public class ItemCalculado
 {
     public ItemBoletim Item { get; init; }
     public EstadoProdutoFilial Estado { get; init; }
-    public bool Arredonda { get; init; }
-    public decimal? PrecoVendaCalc { get; init; }
-    public decimal? Preco9Calc { get; init; }
-    public decimal? MargemPreco9 { get; init; }
-    public decimal? MbePrcVen { get; init; }
+    public bool FL_ARREDONDA { get; init; }
+    public decimal? PRECO_VENDA_CALC { get; init; }
+    public decimal? PRECO9_CALC { get; init; }
+    public decimal? MARGEM_PRECO9 { get; init; }
+    public decimal? MBE_PRCVEN { get; init; }
 }
 
-// [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Valores que o UPDATE gigante da procedure grava.
+// [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Valores que o UPDATE gigante da procedure grava (um nome por coluna de PRODUTO_FILIAL).
 // TemVenda / TemPromocao / Ecommerce dizem em quais UPDATEs o produto entra; quem não entra não tem a coluna alterada.
+// Os UPDATEs de e-commerce reaproveitam PRFI_VL_PRECOVENDA, PRFI_VL_PRCPROM, PRFI_DT_INIPRCPROM e PRFI_DT_FIMPRCPROM (mesmo valor da procedure).
 public class ProdutoFilialAtualizacao
 {
-    public int FilialId { get; set; }
-    public int ProdutoId { get; set; }
-
+    public int FILI_CD_FILIAL { get; set; }
+    public int PRME_CD_PRODUTO { get; set; }
     public bool TemVenda { get; set; }      // BOPD_VL_PRCVENDA > 0
     public bool TemPromocao { get; set; }   // BOPD_VL_PRCPROM > 0
     public bool Ecommerce { get; set; }     // ATUALIZAR_PRECO_ECOMMERCE = 1
-
-    public decimal? PrecoVenda { get; set; }   // PRECO_VENDA_CALC (já arredondado)
-    public decimal? Preco3 { get; set; }
-    public decimal? Preco6 { get; set; }
-    public decimal? Preco9 { get; set; }       // PRECO9_CALC
-    public decimal? MbePrcVen { get; set; }
-    public decimal? MbePreco9 { get; set; }    // MARGEM_PRECO9
-    public decimal? MargemVendaPrecificacao { get; set; }
-    public decimal? DescontoEmbutido { get; set; }
-    public decimal? PrcProm { get; set; }
-    public DateTime? DtIniPrcProm { get; set; }
-    public DateTime? DtFimPrcProm { get; set; }
-    public decimal? MargemPromocaoPrecificacao { get; set; }
-    public string? EncarteClienteSempre { get; set; }
-    public DateTime DataUltimaAtualizacao { get; set; } // GETDATE() da execução
+    public decimal? PRFI_VL_PRECOVENDA { get; set; }   // PRECO_VENDA_CALC (já arredondado)
+    public decimal? PRFI_VL_PRECO3 { get; set; }
+    public decimal? PRFI_VL_PRECO6 { get; set; }
+    public decimal? PRFI_VL_PRECO9 { get; set; }       // PRECO9_CALC
+    public decimal? PRFI_PR_MBEPRCVEN { get; set; }    // MBE_PRCVEN
+    public decimal? PRFI_PR_MBEPRECO9 { get; set; }    // MARGEM_PRECO9
+    public decimal? MARGEM_VENDA_PRECIFICACAO { get; set; }
+    public decimal? PRFI_PR_MARGCALPMC { get; set; }   // PERCENTUAL_DESCONTO_EMBUTIDO do boletim (o CAL antigo vira o ANT no UPDATE)
+    public decimal? PRFI_VL_PRCPROM { get; set; }
+    public DateTime? PRFI_DT_INIPRCPROM { get; set; }
+    public DateTime? PRFI_DT_FIMPRCPROM { get; set; }
+    public decimal? MARGEM_PROMOCAO_PRECIFICACAO { get; set; }
+    public string? ENCARTE_CLIENTE_SEMPRE { get; set; }
+    public DateTime PRFI_DT_ULTAPRCVEN { get; set; }   // GETDATE() da execução
+    public DateTime PRFI_DH_ULTATUBOLE { get; set; }   // GETDATE() da execução
 }
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 4.2/4.3/4.4]: Valores dos UPDATEs de Farmácia Popular / Acordo.
 // Valor null = o boletim não trouxe o dado, então a coluna fica como está.
 public class PrecoFarmaciaPopularAtualizacao
 {
-    public int FilialId { get; set; }
-    public int ProdutoId { get; set; }
-    public decimal? Preco1 { get; set; }
-    public decimal? Preco2 { get; set; }
-    public DateTime DataUltimaAtualizacao { get; set; }
+    public int FILI_CD_FILIAL { get; set; }
+    public int PRME_CD_PRODUTO { get; set; }
+    public decimal? PRFI_VL_PRECO1 { get; set; }
+    public decimal? PRFI_VL_PRECO2 { get; set; }
+    public DateTime PRFI_DT_ULTAPRCVEN { get; set; }
 }
 
 public class PromocaoAcordoAtualizacao
 {
-    public int FilialId { get; set; }
-    public int ProdutoId { get; set; }
-    public decimal? PrcProm { get; set; }        // null quando o item não tem promoção
-    public DateTime? DtIniPrcProm { get; set; }
-    public DateTime? DtFimPrcProm { get; set; }
-    public decimal? Preco1 { get; set; }         // null = não veio; 0 = limpa o PRECO1
-    public DateTime DataUltimaAtualizacao { get; set; }
+    public int FILI_CD_FILIAL { get; set; }
+    public int PRME_CD_PRODUTO { get; set; }
+    public decimal? PRFI_VL_PRCPROM { get; set; }        // null quando o item não tem promoção
+    public DateTime? PRFI_DT_INIPRCPROM { get; set; }
+    public DateTime? PRFI_DT_FIMPRCPROM { get; set; }
+    public decimal? PRFI_VL_PRECO1 { get; set; }         // null = não veio; 0 = limpa o PRECO1
+    public DateTime PRFI_DT_ULTAPRCVEN { get; set; }
 }
 
 // [MIGRAÇÃO DA PROCEDURE - FASE 5]: Item elegível às regras "SEMPRE" (cursores curDemandtec / curProfimetrics).
-public record ItemRegraSempre(int ProdutoId, decimal PrecoMaximoConsumidor, decimal Preco3Arredondado);
+public record ItemRegraSempre(int BOPD_CD_PRODUTO, decimal PRECO_MAXIMO_CONSUMIDOR, decimal BOPD_VL_PRCVENDA3_ARREDONDADO);

@@ -48,18 +48,18 @@ public static class ConsultasTesteEndpoints
                 var itens = await repo.ObterStatusGenericosIaAsync(conn, null, filialId, boletimId);
                 foreach (var i in itens)
                     i.PrecoAplicado = !i.Duplicado
-                        && i.PrecoVendaBoletim is > 0
-                        && i.PrecoVendaAtual == i.PrecoVendaBoletim
-                        && i.Preco3Atual == i.PrecoVenda3Boletim;
+                        && i.BOPD_VL_PRCVENDA is > 0
+                        && i.PRFI_VL_PRECOVENDA == i.BOPD_VL_PRCVENDA
+                        && i.PRFI_VL_PRECO3 == i.BOPD_VL_PRCVENDA3;
 
                 var considerados = itens.Where(i => !i.Duplicado).ToList();
                 var aplicados = considerados.Count(i => i.PrecoAplicado);
 
                 return Results.Ok(new StatusGenericosIaResposta
                 {
-                    BoletimId = boletimId,
-                    FilialId = filialId,
-                    ProcessoGerador = cab.ProcessoGerador,
+                    BOPC_SQ_BOLETIM = boletimId,
+                    FILI_CD_FILIAL = filialId,
+                    BOPC_NM_PROCESSGER = cab.BOPC_NM_PROCESSGER,
                     EhGenericosIa = cab.ProcessoGeradorNormalizado == "GENERICOS IA",
                     TotalItens = itens.Count,
                     ItensIgnoradosDuplicados = itens.Count - considerados.Count,
@@ -84,8 +84,8 @@ public static class ConsultasTesteEndpoints
                 var produtos = await repo.ObterProdutoFilialDoBoletimAsync(conn, null, filialId, boletimId, produtoId);
                 return Results.Ok(new ProdutoFilialBoletimRespostaTeste
                 {
-                    BoletimId = boletimId,
-                    FilialId = filialId,
+                    BOPC_SQ_BOLETIM = boletimId,
+                    FILI_CD_FILIAL = filialId,
                     Produtos = produtos
                 });
             })

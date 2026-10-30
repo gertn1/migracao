@@ -13,38 +13,29 @@ namespace PrecificacaoPoc.Infrastructure.ApenasTestes;
 public class ConsultaTesteRepository : IConsultaTesteRepository
 {
     // O boletim como está nas três tabelas, sem tocar em PRODUTO_FILIAL. Lê só as colunas que a procedure usa
-    // (MapaColunasBoletimTeste) e devolve cada uma com o nome do campo do POST.
+    // (MapaColunasBoletimTeste) e devolve cada uma com o nome da própria coluna.
     // Devolve null quando BOLETIM_PRECO_CAB não tem o boletim.
     public async Task<BoletimCompletoTeste?> ObterBoletimCompletoAsync(IDbConnection c, IDbTransaction? tx, int boletimId)
     {
-        var cab = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Cab)} FROM BOLETIM_PRECO_CAB WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId, MapaColunasBoletimTeste.Cab);
+        var cab = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Cab)} FROM BOLETIM_PRECO_CAB WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId);
         if (cab.Count == 0) return null;
 
         return new BoletimCompletoTeste
         {
-            BoletimId = boletimId,
+            BOPC_SQ_BOLETIM = boletimId,
             Cab = cab[0],
-            Det = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Det)} FROM BOLETIM_PRECO_DET WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId, MapaColunasBoletimTeste.Det),
-            Env = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Env)} FROM BOLETIM_PRECO_ENV WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId, MapaColunasBoletimTeste.Env),
-            Colunas = new()
-            {
-                ["cab"] = MapaColunasBoletimTeste.CampoParaColuna(MapaColunasBoletimTeste.Cab),
-                ["det"] = MapaColunasBoletimTeste.CampoParaColuna(MapaColunasBoletimTeste.Det),
-                ["env"] = MapaColunasBoletimTeste.CampoParaColuna(MapaColunasBoletimTeste.Env)
-            }
+            Det = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Det)} FROM BOLETIM_PRECO_DET WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId),
+            Env = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Env)} FROM BOLETIM_PRECO_ENV WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId)
         };
     }
 
     private static async Task<List<IDictionary<string, object?>>> ObterLinhasAsync(
-        IDbConnection c, IDbTransaction? tx, string sql, int boletimId, IReadOnlyDictionary<string, string> colunaParaCampo)
+        IDbConnection c, IDbTransaction? tx, string sql, int boletimId)
     {
         var linhas = await c.QueryAsync(sql, new { boletimId }, tx);
 
         return linhas
-            .Select(l => ((IDictionary<string, object?>)l)
-                .ToDictionary(
-                    p => colunaParaCampo.TryGetValue(p.Key, out var campo) ? campo : p.Key,
-                    p => p.Value) as IDictionary<string, object?>)
+            .Select(l => ((IDictionary<string, object?>)l).ToDictionary(p => p.Key, p => p.Value) as IDictionary<string, object?>)
             .ToList();
     }
 
@@ -54,42 +45,52 @@ public class ConsultaTesteRepository : IConsultaTesteRepository
     public async Task<List<ProdutoFilialTeste>> ObterProdutoFilialDoBoletimAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, int? produtoId)
     {
         const string sql = @"
-            SELECT d.BOPD_CD_PRODUTO                  AS ProdutoId,
+            SELECT d.BOPD_CD_PRODUTO                  AS PRME_CD_PRODUTO_productId,
+                   d.BOPD_CD_PRODUTO                  AS PRME_CD_PRODUTO,
                    CASE WHEN pf.PRME_CD_PRODUTO IS NULL THEN 0 ELSE 1 END AS ExisteNaFilial,
                    CASE WHEN EXISTS (
                             SELECT 1 FROM COSMOSPRECOS.dbo.FUTURO_PRECO_DUPLICADO fp WITH (NOLOCK)
                             WHERE fp.BOPC_SQ_BOLETIM = d.BOPC_SQ_BOLETIM
                               AND fp.StoreId = @filialId
                               AND fp.ProductId = d.BOPD_CD_PRODUTO) THEN 1 ELSE 0 END AS Duplicado,
-                   CASE WHEN pm.PRME_FL_MONITORADO = 'S' THEN 1 WHEN pm.PRME_FL_MONITORADO = 'N' THEN 0 END AS Monitorado,
-                   pf.PRFI_VL_UCG                     AS Ucg,
-                   pf.PRFI_VL_CMPG                    AS Cmpg,
-                   pf.PRFI_VL_PRCMAXCONS              AS PrcMaxCons,
-                   pf.PRFI_VL_PRECOVENDA              AS PrecoVenda,
-                   pf.PRFI_VL_PRECO1                  AS Preco1,
-                   pf.PRFI_VL_PRECO2                  AS Preco2,
-                   pf.PRFI_VL_PRECO3                  AS Preco3,
-                   pf.PRFI_VL_PRECO6                  AS Preco6,
-                   pf.PRFI_VL_PRECO9                  AS Preco9,
-                   pf.PRFI_PR_MBEPRCVEN               AS MbePrcVen,
-                   pf.PRFI_PR_MBEPRECO9               AS MbePreco9,
-                   pf.MARGEM_VENDA_PRECIFICACAO       AS MargemVendaPrecificacao,
-                   pf.MARGEM_PROMOCAO_PRECIFICACAO    AS MargemPromocaoPrecificacao,
-                   pf.PRFI_PR_MARGANTPMC              AS MargAntPmc,
-                   pf.PRFI_PR_MARGCALPMC              AS MargCalPmc,
-                   pf.PRFI_VL_PRCPROM                 AS PrcProm,
-                   pf.PRFI_DT_INIPRCPROM              AS DtIniPrcProm,
-                   pf.PRFI_DT_FIMPRCPROM              AS DtFimPrcProm,
-                   pf.PRECO_VENDA_ECOMMERCE           AS PrecoVendaEcommerce,
-                   pf.PRECO_PROMOCAO_ECOMMERCE        AS PrecoPromocaoEcommerce,
-                   pf.DATA_INICIO_PROMOCAO_ECOMMERCE  AS DataInicioPromoEcommerce,
-                   pf.DATA_FIM_PROMOCAO_ECOMMERCE     AS DataFimPromoEcommerce,
-                   pf.MARGEM_VENDA_MAXIMO_ECOMMERCE   AS MargemVendaMaximoEcommerce,
-                   pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE   AS DataAtualizacaoBoletimEcommerce,
-                   pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE AS DataAlteracaoPrecoVendaEcommerce,
-                   pf.ENCARTE_CLIENTE_SEMPRE          AS EncarteClienteSempre,
-                   pf.PRFI_DT_ULTAPRCVEN              AS DtUltimaAtualizacaoPreco,
-                   pf.PRFI_DH_ULTATUBOLE              AS DhUltimaAtualizacaoBoletim
+                   pm.PRME_FL_MONITORADO,
+                   pf.PRFI_VL_UCG,
+                   pf.PRFI_VL_CMPG,
+                   pf.PRFI_VL_PRCMAXCONS,
+                   d.BOPD_VL_PRCVENDA AS PRFI_VL_PRECOVENDA_salePrice,
+                   pf.PRFI_VL_PRECOVENDA,
+                   d.BOPD_VL_PRCVENDA1 AS PRFI_VL_PRECO1_totalPopularPharmacyPrice,
+                   pf.PRFI_VL_PRECO1,
+                   d.BOPD_VL_PRCVENDA2 AS PRFI_VL_PRECO2_parcialPopularPharmacyPrice,
+                   pf.PRFI_VL_PRECO2,
+                   d.BOPD_VL_PRCVENDA3 AS PRFI_VL_PRECO3_semprePrice,
+                   pf.PRFI_VL_PRECO3,
+                   d.BOPD_VL_PRCVENDA6 AS PRFI_VL_PRECO6_previousPrice,
+                   pf.PRFI_VL_PRECO6,
+                   pf.PRFI_VL_PRECO9,
+                   pf.PRFI_PR_MBEPRCVEN,
+                   pf.PRFI_PR_MBEPRECO9,
+                   d.MARGEM_VENDA_PRECIFICACAO AS MARGEM_VENDA_PRECIFICACAO_salePricingMargin,
+                   pf.MARGEM_VENDA_PRECIFICACAO,
+                   d.MARGEM_PROMOCAO_PRECIFICACAO AS MARGEM_PROMOCAO_PRECIFICACAO_promotionPricingMargin,
+                   pf.MARGEM_PROMOCAO_PRECIFICACAO,
+                   pf.PRFI_PR_MARGANTPMC,
+                   pf.PRFI_PR_MARGCALPMC,
+                   d.BOPD_VL_PRCPROM AS PRFI_VL_PRCPROM_promotionalPrice,
+                   pf.PRFI_VL_PRCPROM,
+                   pf.PRFI_DT_INIPRCPROM,
+                   pf.PRFI_DT_FIMPRCPROM,
+                   pf.PRECO_VENDA_ECOMMERCE,
+                   pf.PRECO_PROMOCAO_ECOMMERCE,
+                   pf.DATA_INICIO_PROMOCAO_ECOMMERCE,
+                   pf.DATA_FIM_PROMOCAO_ECOMMERCE,
+                   pf.MARGEM_VENDA_MAXIMO_ECOMMERCE,
+                   pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE,
+                   pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE,
+                   d.ENCARTE_CLIENTE_SEMPRE AS ENCARTE_CLIENTE_SEMPRE_alwaysCustomerFlyer,
+                   pf.ENCARTE_CLIENTE_SEMPRE,
+                   pf.PRFI_DT_ULTAPRCVEN,
+                   pf.PRFI_DH_ULTATUBOLE
             FROM BOLETIM_PRECO_DET d WITH (NOLOCK)
             LEFT JOIN PRODUTO_FILIAL pf WITH (NOLOCK)
                 ON pf.FILI_CD_FILIAL = @filialId AND pf.PRME_CD_PRODUTO = d.BOPD_CD_PRODUTO
@@ -107,17 +108,17 @@ public class ConsultaTesteRepository : IConsultaTesteRepository
     public async Task<List<StatusItemGenericosIa>> ObterStatusGenericosIaAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId)
     {
         const string sql = @"
-            SELECT d.BOPD_CD_PRODUTO            AS ProdutoId,
-                   d.BOPD_VL_PRCVENDA           AS PrecoVendaBoletim,
-                   d.BOPD_VL_PRCVENDA3          AS PrecoVenda3Boletim,
-                   pf.PRFI_VL_PRECOVENDA        AS PrecoVendaAtual,
-                   pf.PRFI_VL_PRECO3            AS Preco3Atual,
-                   pf.PRFI_DH_ULTATUBOLE        AS DhUltimaAtualizacaoBoletim,
+            SELECT d.BOPD_CD_PRODUTO,
+                   d.BOPD_VL_PRCVENDA,
+                   d.BOPD_VL_PRCVENDA3,
+                   pf.PRFI_VL_PRECOVENDA,
+                   pf.PRFI_VL_PRECO3,
+                   pf.PRFI_DH_ULTATUBOLE,
                    CASE WHEN fp.ProductId IS NULL THEN 0 ELSE 1 END AS Duplicado,
-                   r.DPCA_NM_REGRA              AS NomeRegraSempre,
+                   r.DPCA_NM_REGRA,
                    CASE WHEN r.DPCA_CT_DESCPRDCAB IS NULL THEN 0 ELSE 1 END AS RegraSempreExiste,
-                   r.DPCA_DT_INCLUSDSC          AS RegraSempreDtInclusao,
-                   r.DPCA_PR_DESCPRD            AS RegraSempreDescontoPercentual
+                   r.DPCA_DT_INCLUSDSC,
+                   r.DPCA_PR_DESCPRD
             FROM BOLETIM_PRECO_DET d WITH (NOLOCK)
             LEFT JOIN PRODUTO_FILIAL pf WITH (NOLOCK)
                    ON pf.PRME_CD_PRODUTO = d.BOPD_CD_PRODUTO AND pf.FILI_CD_FILIAL = @filialId
