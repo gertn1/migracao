@@ -48,7 +48,27 @@ public class BoletimRepository : IBoletimRepository
                    pf.PRFI_VL_UCG,
                    pf.PRFI_VL_CMPG,
                    pf.PRFI_VL_PRCMAXCONS,
-                   pf.PRFI_VL_PRECO9
+                   pf.PRFI_VL_PRECOVENDA,
+                   pf.PRFI_VL_PRECO3,
+                   pf.PRFI_VL_PRECO6,
+                   pf.PRFI_VL_PRECO9,
+                   pf.PRFI_PR_MBEPRCVEN,
+                   pf.PRFI_PR_MBEPRECO9,
+                   pf.MARGEM_VENDA_PRECIFICACAO,
+                   pf.PRFI_PR_MARGANTPMC,
+                   pf.PRFI_PR_MARGCALPMC,
+                   pf.PRFI_VL_PRCPROM,
+                   pf.PRFI_DT_INIPRCPROM,
+                   pf.PRFI_DT_FIMPRCPROM,
+                   pf.MARGEM_PROMOCAO_PRECIFICACAO,
+                   pf.ENCARTE_CLIENTE_SEMPRE,
+                   pf.PRECO_VENDA_ECOMMERCE,
+                   pf.PRECO_PROMOCAO_ECOMMERCE,
+                   pf.DATA_INICIO_PROMOCAO_ECOMMERCE,
+                   pf.DATA_FIM_PROMOCAO_ECOMMERCE,
+                   pf.MARGEM_VENDA_MAXIMO_ECOMMERCE,
+                   pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE,
+                   pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE
             FROM PRODUTO_FILIAL pf WITH (NOLOCK)
             INNER JOIN PRODUTO_MESTRE pm WITH (NOLOCK)
                 ON pm.PRME_CD_PRODUTO = pf.PRME_CD_PRODUTO
@@ -63,76 +83,40 @@ public class BoletimRepository : IBoletimRepository
         return await c.QueryAsync<EstadoProdutoFilial>(sql, new { filialId, boletimId, ids }, tx);
     }
 
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: o UPDATE gigante da procedure vira vários UPDATEs pequenos, um por assunto.
-    // Cada um grava só "coluna = valor" e recebe apenas os produtos a que se aplica. Quem não entra no UPDATE
-    // não tem a coluna alterada, que é o "ELSE pf.coluna" da procedure; por isso o valor atual não precisa ser lido.
-    // Todos rodam na mesma transação do service.
+    // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: o UPDATE gigante da procedure. Cada item do lote já traz o valor final de todas as colunas
+    // (as regras foram aplicadas pelo AtualizacaoProdutoFilialBuilder), então o UPDATE só grava, sem condição nenhuma.
+    // Roda na mesma transação do service.
     public async Task<int> AtualizarProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<ProdutoFilialAtualizacao> lote)
     {
-        var itens = lote.AsList();
-
-        // 1) Preço de venda: só quem tem BOPD_VL_PRCVENDA > 0. Preço 3 e margem de venda só trocam se o boletim trouxe valor.
-        await ExecutarAsync(c, tx, @"
+        const string sql = @"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRECOVENDA = @PRFI_VL_PRECOVENDA,
-                PRFI_VL_PRECO3 = COALESCE(@PRFI_VL_PRECO3, PRFI_VL_PRECO3),
-                PRFI_VL_PRECO6 = @PRFI_VL_PRECO6,
-                PRFI_VL_PRECO9 = @PRFI_VL_PRECO9,
-                PRFI_PR_MBEPRCVEN = @PRFI_PR_MBEPRCVEN,
-                PRFI_PR_MBEPRECO9 = @PRFI_PR_MBEPRECO9,
-                MARGEM_VENDA_PRECIFICACAO = COALESCE(@MARGEM_VENDA_PRECIFICACAO, MARGEM_VENDA_PRECIFICACAO)
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens.Where(i => i.TemVenda));
+                PRFI_VL_PRECOVENDA = @PrecoVenda,
+                PRFI_VL_PRECO3 = @Preco3,
+                PRFI_VL_PRECO6 = @Preco6,
+                PRFI_VL_PRECO9 = @Preco9,
+                PRFI_PR_MBEPRCVEN = @MbePrcVen,
+                PRFI_PR_MBEPRECO9 = @MbePreco9,
+                MARGEM_VENDA_PRECIFICACAO = @MargemVendaPrecificacao,
+                PRFI_PR_MARGANTPMC = @MargAntPmc,
+                PRFI_PR_MARGCALPMC = @MargCalPmc,
+                PRFI_VL_PRCPROM = @PrcProm,
+                PRFI_DT_INIPRCPROM = @DtIniPrcProm,
+                PRFI_DT_FIMPRCPROM = @DtFimPrcProm,
+                MARGEM_PROMOCAO_PRECIFICACAO = @MargemPromocaoPrecificacao,
+                PRECO_VENDA_ECOMMERCE = @PrecoVendaEcommerce,
+                PRECO_PROMOCAO_ECOMMERCE = @PrecoPromocaoEcommerce,
+                DATA_INICIO_PROMOCAO_ECOMMERCE = @DataInicioPromoEcommerce,
+                DATA_FIM_PROMOCAO_ECOMMERCE = @DataFimPromoEcommerce,
+                MARGEM_VENDA_MAXIMO_ECOMMERCE = @MargemVendaMaximoEcommerce,
+                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE = @DataAtualizacaoBoletimEcommerce,
+                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = @DataAlteracaoPrecoVendaEcommerce,
+                ENCARTE_CLIENTE_SEMPRE = @EncarteClienteSempre,
+                PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao,
+                PRFI_DH_ULTATUBOLE = @DataUltimaAtualizacao
+                -- XXXX_DH_ALT: mantido fora por solicitação do DBA (atualizado pela trigger tg_produto_filial_update)
+            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
 
-        // 2) Desconto embutido (PMC): o CAL atual vira o novo ANT e o desconto do boletim vira o novo CAL.
-        //    No UPDATE do SQL Server o lado direito enxerga o valor de antes, então ANT recebe o CAL antigo.
-        await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET
-                PRFI_PR_MARGANTPMC = COALESCE(PRFI_PR_MARGCALPMC, PRFI_PR_MARGANTPMC),
-                PRFI_PR_MARGCALPMC = @PRFI_PR_MARGCALPMC
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens.Where(i => i.TemVenda && i.PRFI_PR_MARGCALPMC is not null));
-
-        // 3) Promoção: só quem tem BOPD_VL_PRCPROM > 0. Margem de promoção e encarte só trocam se o boletim trouxe valor.
-        await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRCPROM = @PRFI_VL_PRCPROM,
-                PRFI_DT_INIPRCPROM = @PRFI_DT_INIPRCPROM,
-                PRFI_DT_FIMPRCPROM = @PRFI_DT_FIMPRCPROM,
-                MARGEM_PROMOCAO_PRECIFICACAO = COALESCE(@MARGEM_PROMOCAO_PRECIFICACAO, MARGEM_PROMOCAO_PRECIFICACAO),
-                ENCARTE_CLIENTE_SEMPRE = COALESCE(@ENCARTE_CLIENTE_SEMPRE, ENCARTE_CLIENTE_SEMPRE)
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens.Where(i => i.TemPromocao));
-
-        // 4) E-commerce - preço de venda (ATUALIZAR_PRECO_ECOMMERCE = 1 e com preço de venda)
-        await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET PRECO_VENDA_ECOMMERCE = @PRFI_VL_PRECOVENDA
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens.Where(i => i.Ecommerce && i.TemVenda));
-
-        // 5) E-commerce - promoção (ATUALIZAR_PRECO_ECOMMERCE = 1 e com promoção)
-        await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET
-                PRECO_PROMOCAO_ECOMMERCE = @PRFI_VL_PRCPROM,
-                DATA_INICIO_PROMOCAO_ECOMMERCE = @PRFI_DT_INIPRCPROM,
-                DATA_FIM_PROMOCAO_ECOMMERCE = @PRFI_DT_FIMPRCPROM
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens.Where(i => i.Ecommerce && i.TemPromocao));
-
-        // 6) E-commerce - margem máxima e datas (ATUALIZAR_PRECO_ECOMMERCE = 1, qualquer item). Sem desconto no boletim usa o CAL atual.
-        await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET
-                MARGEM_VENDA_MAXIMO_ECOMMERCE = COALESCE(@PRFI_PR_MARGCALPMC, PRFI_PR_MARGCALPMC),
-                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE = @PRFI_DT_ULTAPRCVEN,
-                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = @PRFI_DT_ULTAPRCVEN
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens.Where(i => i.Ecommerce));
-
-        // 7) Auditoria: todo item que entrou na fase 4.1 (venda ou promoção)
-        return await ExecutarAsync(c, tx, @"
-            UPDATE PRODUTO_FILIAL SET PRFI_DT_ULTAPRCVEN = @PRFI_DT_ULTAPRCVEN, PRFI_DH_ULTATUBOLE = @PRFI_DH_ULTATUBOLE
-            WHERE FILI_CD_FILIAL = @FILI_CD_FILIAL AND PRME_CD_PRODUTO = @PRME_CD_PRODUTO",
-            itens);
+        return await c.ExecuteAsync(sql, lote, tx);
     }
 
     // Só executa se houver produtos para o UPDATE (lista vazia = nenhuma ida ao banco)

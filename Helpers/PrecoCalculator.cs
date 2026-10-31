@@ -22,17 +22,17 @@ public static class PrecoCalculator
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Substituição do CROSS APPLY flags(FL_ARREDONDA)
     // Arredonda somente quando NÃO é Profimetrics, NÃO é Demandtec e o processo gerador <> 'MANUAL'.
-    public static bool DeveArredondar(BoletimCabecalho cab) =>
-        !cab.Profimetrics && !cab.Demandtec && cab.ProcessoGeradorNormalizado != "MANUAL";
+    public static bool DeveArredondar(PriceBulletinCab cab) =>
+        !cab.Profimetrics() && !cab.Demandtec() && cab.ProcessoGerador() != "MANUAL";
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Substituição do cálculo inline do Preço 9 (+5% ou PMC) para método C#
     // Equivale a CONVERT(NUMERIC(12,2), ROUND(<CASE>, 2, 2)) -> o 3º argumento "2" do ROUND SQL TRUNCA (não arredonda).
-    public static decimal? CalcularPreco9(ItemBoletim i, EstadoProdutoFilial estado)
+    public static decimal? CalcularPreco9(PriceBulletinDet i, EstadoProdutoFilial estado)
     {
         // SQL: CASE WHEN BOPD_VL_PRCVENDA IS NOT NULL AND > 0 ... sem ELSE -> NULL quando venda é NULL ou <= 0
-        if (i.BOPD_VL_PRCVENDA is null or <= 0) return null;
+        if (i.PrecoVenda() is null or <= 0) return null;
 
-        decimal venda = ArredondarNumeric(i.BOPD_VL_PRCVENDA!.Value, 2); // normalizado.BOPD_VL_PRCVENDA NUMERIC(12,2)
+        decimal venda = i.PrecoVenda()!.Value;                           // normalizado.BOPD_VL_PRCVENDA NUMERIC(12,2)
         decimal pmc = estado.PRFI_VL_PRCMAXCONS ?? 0m;                   // ISNULL(PRFI_VL_PRCMAXCONS, 0)
         decimal preco9Atual = estado.PRFI_VL_PRECO9 ?? 0m;               // ISNULL(PRFI_VL_PRECO9, 0)
         bool monitorado = estado.PRME_FL_MONITORADO == "S";

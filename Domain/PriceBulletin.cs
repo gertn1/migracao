@@ -1,9 +1,10 @@
-namespace PrecificacaoPoc.Domain.ApenasTestes;
+namespace PrecificacaoPoc.Domain;
 
 /// <summary>
-/// APENAS TESTES: cópias das entidades da aplicação real (Api.Src.Modules.PriceBulletin.Infra.Data.Entities.OldBulletin),
-/// só com as propriedades, para o endpoint receber o mesmo formato que o UpdateByBulletinData vai repassar.
-/// Na aplicação real estas classes não existem aqui: são as originais.
+/// Entidades do boletim EXATAMENTE como chegam de outra aplicação (cópia de Api.Src.Modules.PriceBulletin.Infra.Data.Entities.OldBulletin,
+/// só com as propriedades): é o formato do cab e do det do POST de processar-boletim e o que o serviço processa direto.
+/// Na aplicação real estas classes não existem aqui: são as originais. Por isso as regras de leitura (ISNULL, precisão das colunas)
+/// ficam em PriceBulletinRegras, e não nas classes.
 /// </summary>
 public class PriceBulletinCab
 {

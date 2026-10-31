@@ -11,7 +11,6 @@ namespace PrecificacaoPoc.Domain.ApenasTestes;
 // Chame antes e depois de processar e compare por ProdutoId.
 public class ProdutoFilialBoletimRespostaTeste
 {
-    public int BOPC_SQ_BOLETIM { get; set; }
     public int FILI_CD_FILIAL { get; set; }
     public List<ProdutoFilialTeste> Produtos { get; set; } = new();
 }
