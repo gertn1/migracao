@@ -1,12 +1,14 @@
+using PrecificacaoPoc.Constantes;
 using PrecificacaoPoc.Domain;
 using PrecificacaoPoc.Helpers;
 using PrecificacaoPoc.Interfaces;
+using PrecificacaoPoc.Mapeamento;
 using System.Data;
 
 namespace PrecificacaoPoc.Services;
 
 /// <summary>
-/// Orquestrador: recebe cab, det e filial, lê o produto na filial, entrega tudo ao ProdutoFilialAtualizacao (que tem as regras e os cálculos)
+/// Orquestrador: recebe cab, det e filial, lê o produto na filial, entrega tudo ao ProdutoFilialAtualizacaoMapper (regras e cálculos)
 /// e manda o resultado ao repositório gravar.
 /// </summary>
 public class BoletimPrecoService(
@@ -16,10 +18,6 @@ public class BoletimPrecoService(
     IArredondadorPrecoVenda arredondador,
     ILogger<BoletimPrecoService> log)
 {
-    private const string ProcessoGenericosIa = "GENERICOS IA";
-    private const string ProcessoFarmaciaExclusao = "FARMACIA POPULAR - EXCLUSAO";
-    private const string ProcessoFarmaciaAlteracao = "FARMACIA POPULAR - ALTERACAO";
-
     public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, PriceBulletinCab cab, List<PriceBulletinDet> det, int usuarioId)
     {
         PriceBulletinRegras.ValidarSemProdutoRepetido(det);
@@ -42,7 +40,7 @@ public class BoletimPrecoService(
         var tipoCusto = (TipoCusto)tipoCustoChar.Value;
 
         // ══[MIGRAÇÃO DA PROCEDURE - FASE 2]: Quando o processo gerador for 'GENERICOS IA'
-        if (cab.ProcessoGerador() == ProcessoGenericosIa)
+        if (cab.ProcessoGerador() == ProcessosBoletim.GenericosIa)
         {
             int ret = await regrasSempre.AtualizarGenericosIaAsync(conn, null, cab.Id, filialId, usuarioId);
             resultado.Observacoes.Add("Processo GENERICOS IA: delegado integralmente à sp_AtualizaPrecoVendaGenericosEstruturaSempre (fluxo da procedure original).");
@@ -69,7 +67,7 @@ public class BoletimPrecoService(
         {
             var atual = produtoPorId[item.ProductId];
             // Mapear devolve null quando nada vale para o item (sem venda, sem promoção, sem Farmácia Popular / acordo)
-            var atualizacao = ProdutoFilialAtualizacao.Mapear(cab, item, atual, tipoCusto, filialId, agora, arredondar);
+            var atualizacao = ProdutoFilialAtualizacaoMapper.Mapear(cab, item, atual, tipoCusto, filialId, agora, arredondar);
 
             if (atualizacao is not null)
                 lote.Add(atualizacao);
@@ -85,9 +83,9 @@ public class BoletimPrecoService(
 
             // Tabela PRODUTO_FARMACIA_POPULAR (o PRODUTO_FILIAL de Farmácia Popular já saiu no UPDATE acima)
             var processo = cab.ProcessoGerador();
-            if (processo == ProcessoFarmaciaExclusao) 
+            if (processo == ProcessosBoletim.FarmaciaExclusao) 
                 await repo.ExcluirFarmaciaPopularAsync(conn, tx, itens.Select(i => i.ProductId));
-            else if (processo == ProcessoFarmaciaAlteracao)
+            else if (processo == ProcessosBoletim.FarmaciaAlteracao)
                 await repo.LimparOperacaoFarmaciaPopularAsync(conn, tx, itens.Select(i => i.ProductId));
 
             tx.Commit();
