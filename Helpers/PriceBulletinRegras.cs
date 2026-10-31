@@ -41,5 +41,9 @@ public static class PriceBulletinRegras
     }
 
     private static decimal? NaColuna(decimal? valor, int casas) =>
-        valor is null ? null : PrecoCalculator.ArredondarNumeric(valor.Value, casas);
+        valor is null ? null : ArredondarNumeric(valor.Value, casas);
+
+    // CONVERT(NUMERIC(p,s), x) arredonda "metade para longe do zero"
+    public static decimal ArredondarNumeric(decimal valor, int casas) =>
+        Math.Round(valor, casas, MidpointRounding.AwayFromZero);
 }

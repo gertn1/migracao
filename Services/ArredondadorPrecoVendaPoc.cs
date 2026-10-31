@@ -9,5 +9,5 @@ namespace PrecificacaoPoc.Services;
 /// </summary>
 public class ArredondadorPrecoVendaPoc : IArredondadorPrecoVenda
 {
-    public decimal Arredondar(decimal preco, int filialId) => PrecoCalculator.ArredondarNumeric(preco, 2);
+    public decimal Arredondar(decimal preco, int filialId) => PriceBulletinRegras.ArredondarNumeric(preco, 2);
 }

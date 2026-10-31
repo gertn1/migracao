@@ -10,10 +10,10 @@ public static class PrecificacaoEndpoints
     public static IEndpointRouteBuilder MapPrecificacaoEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/precificacao/processar-boletim",
-            async (ProcessarBoletimRequest req, BoletimPrecoService service, bool simularApenas = false) =>
+            async (ProcessarBoletimRequest req, BoletimPrecoService service) =>
             {
                 var resultados = new List<ResultadoProcessamento>();
-                resultados.Add(await service.ProcessarPorFilialAsync(req.FilialId, req.Cab, req.Det, req.UsuarioId, simularApenas));
+                resultados.Add(await service.ProcessarPorFilialAsync(req.FilialId, req.Cab, req.Det, req.UsuarioId));
 
                 return Results.Ok(resultados);
             })

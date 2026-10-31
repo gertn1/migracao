@@ -28,7 +28,6 @@ public static class ConsultasTesteEndpoints
                 var produtos = await repo.ObterProdutoFilialDoBoletimAsync(conn, null, filialId, boletimId, produtoId);
                 return Results.Ok(new ProdutoFilialBoletimRespostaTeste
                 {
-                    BOPC_SQ_BOLETIM = boletimId,
                     FILI_CD_FILIAL = filialId,
                     Produtos = produtos
                 });
