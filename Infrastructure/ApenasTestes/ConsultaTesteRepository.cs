@@ -12,33 +12,6 @@ namespace PrecificacaoPoc.Infrastructure.ApenasTestes;
 /// </summary>
 public class ConsultaTesteRepository : IConsultaTesteRepository
 {
-    // O boletim como está nas três tabelas, sem tocar em PRODUTO_FILIAL. Lê só as colunas que a procedure usa
-    // (MapaColunasBoletimTeste) e devolve cada uma com o nome da própria coluna.
-    // Devolve null quando BOLETIM_PRECO_CAB não tem o boletim.
-    public async Task<BoletimCompletoTeste?> ObterBoletimCompletoAsync(IDbConnection c, IDbTransaction? tx, int boletimId)
-    {
-        var cab = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Cab)} FROM BOLETIM_PRECO_CAB WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId);
-        if (cab.Count == 0) return null;
-
-        return new BoletimCompletoTeste
-        {
-            BOPC_SQ_BOLETIM = boletimId,
-            Cab = cab[0],
-            Det = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Det)} FROM BOLETIM_PRECO_DET WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId),
-            Env = await ObterLinhasAsync(c, tx, $"SELECT {MapaColunasBoletimTeste.ListaColunas(MapaColunasBoletimTeste.Env)} FROM BOLETIM_PRECO_ENV WITH (NOLOCK) WHERE BOPC_SQ_BOLETIM = @boletimId", boletimId)
-        };
-    }
-
-    private static async Task<List<IDictionary<string, object?>>> ObterLinhasAsync(
-        IDbConnection c, IDbTransaction? tx, string sql, int boletimId)
-    {
-        var linhas = await c.QueryAsync(sql, new { boletimId }, tx);
-
-        return linhas
-            .Select(l => ((IDictionary<string, object?>)l).ToDictionary(p => p.Key, p => p.Value) as IDictionary<string, object?>)
-            .ToList();
-    }
-
     // Todo produto do boletim, só com as colunas de PRODUTO_FILIAL que a procedure atualiza. LEFT JOIN de propósito: quem a
     // procedure ignoraria (INNER JOIN / NOT EXISTS da Fase 3) continua na lista, só marcado como ExisteNaFilial/Duplicado.
     // Custos, PMC e monitorado são só lidos pela procedure (BoletimRepository.ObterEstadoProdutoFilialAsync), por isso não entram aqui.
@@ -171,36 +144,5 @@ public class ConsultaTesteRepository : IConsultaTesteRepository
         return linhas
             .Select(l => ((IDictionary<string, object?>)l).ToDictionary(p => p.Key, p => p.Value) as IDictionary<string, object?>)
             .ToList();
-    }
-
-    // Confronta cada item do boletim com PRODUTO_FILIAL e com a regra criada pela
-    // sp_AtualizaPrecoVendaGenericosEstruturaSempre (nome: 'Desconto em Genérico L{filial:5}P{produto:8}')
-    public async Task<List<StatusItemGenericosIa>> ObterStatusGenericosIaAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId)
-    {
-        const string sql = @"
-            SELECT d.BOPD_CD_PRODUTO AS BOPD_CD_PRODUTO_productId,
-                   d.BOPD_VL_PRCVENDA AS BOPD_VL_PRCVENDA_salePrice,
-                   d.BOPD_VL_PRCVENDA3 AS BOPD_VL_PRCVENDA3_semprePrice,
-                   pf.PRFI_VL_PRECOVENDA,
-                   pf.PRFI_VL_PRECO3,
-                   pf.PRFI_DH_ULTATUBOLE,
-                   CASE WHEN fp.ProductId IS NULL THEN 0 ELSE 1 END AS Duplicado,
-                   r.DPCA_NM_REGRA,
-                   CASE WHEN r.DPCA_CT_DESCPRDCAB IS NULL THEN 0 ELSE 1 END AS RegraSempreExiste,
-                   r.DPCA_DT_INCLUSDSC,
-                   r.DPCA_PR_DESCPRD
-            FROM BOLETIM_PRECO_DET d WITH (NOLOCK)
-            LEFT JOIN PRODUTO_FILIAL pf WITH (NOLOCK)
-                   ON pf.PRME_CD_PRODUTO = d.BOPD_CD_PRODUTO AND pf.FILI_CD_FILIAL = @filialId
-            LEFT JOIN COSMOSPRECOS..FUTURO_PRECO_DUPLICADO fp WITH (NOLOCK)
-                   ON fp.BOPC_SQ_BOLETIM = d.BOPC_SQ_BOLETIM
-                  AND fp.ProductId = d.BOPD_CD_PRODUTO AND fp.StoreId = @filialId
-            LEFT JOIN CosmosFL..desc_produto_cab r WITH (NOLOCK)
-                   ON r.DPCA_CD_FILIAL = @filialId
-                  AND r.DPCA_NM_REGRA = 'Desconto em Genérico L' + RIGHT('00000' + CONVERT(VARCHAR(5), @filialId), 5)
-                                        + 'P' + RIGHT('00000000' + CONVERT(VARCHAR(8), d.BOPD_CD_PRODUTO), 8)
-            WHERE d.BOPC_SQ_BOLETIM = @boletimId";
-
-        return (await c.QueryAsync<StatusItemGenericosIa>(sql, new { filialId, boletimId }, tx)).ToList();
     }
 }

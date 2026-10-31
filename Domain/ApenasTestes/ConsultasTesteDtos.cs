@@ -7,52 +7,6 @@ namespace PrecificacaoPoc.Domain.ApenasTestes;
 // ║ sem impacto nas regras de negócio.                                                   ║
 // ╚══════════════════════════════════════════════════════════════════════════════════════╝
 
-// Resposta do GET /api/testes/boletins/{boletimId}: o boletim como está nas tabelas, sem processar nada e sem PRODUTO_FILIAL.
-// No agrupamento do POST (cab, det, env), só com as colunas que a procedure usa (MapaColunasBoletimTeste),
-// cada uma com o nome da própria coluna.
-public class BoletimCompletoTeste
-{
-    public int BOPC_SQ_BOLETIM { get; set; }
-    public IDictionary<string, object?>? Cab { get; set; }                       // BOLETIM_PRECO_CAB (1 linha)
-    public List<IDictionary<string, object?>> Det { get; set; } = new();         // BOLETIM_PRECO_DET (itens)
-    public List<IDictionary<string, object?>> Env { get; set; } = new();         // BOLETIM_PRECO_ENV (filiais do boletim)
-}
-
-// Resposta do GET /api/testes/boletins/{boletimId}/genericos-ia/status: se a sp_AtualizaPrecoVendaGenericosEstruturaSempre
-// já aplicou o boletim (preço no PRODUTO_FILIAL igual ao do boletim + regra "Desconto em Genérico" em CosmosFL)
-public class StatusGenericosIaResposta
-{
-    public int BOPC_SQ_BOLETIM { get; set; }
-    public int FILI_CD_FILIAL { get; set; }
-    public string? BOPC_NM_PROCESSGER { get; set; }
-    public bool EhGenericosIa { get; set; }
-    public int TotalItens { get; set; }
-    public int ItensIgnoradosDuplicados { get; set; }
-    public int ItensAplicados { get; set; }
-    public int ItensPendentes { get; set; }
-    // true quando todos os itens considerados (exceto duplicados) já estão com o preço do boletim
-    public bool Processado { get; set; }
-    public List<StatusItemGenericosIa> Itens { get; set; } = new();
-}
-
-public class StatusItemGenericosIa
-{
-    public int BOPD_CD_PRODUTO_productId { get; set; }
-    public decimal? BOPD_VL_PRCVENDA_salePrice { get; set; }          // no boletim
-    public decimal? BOPD_VL_PRCVENDA3_semprePrice { get; set; }         // no boletim
-    public decimal? PRFI_VL_PRECOVENDA_BOPD_VL_PRCVENDA_salePrice { get; set; }   // enviado no boletim
-    public decimal? PRFI_VL_PRECOVENDA { get; set; }        // atual em PRODUTO_FILIAL
-    public decimal? PRFI_VL_PRECO3_BOPD_VL_PRCVENDA3_semprePrice { get; set; }   // enviado no boletim
-    public decimal? PRFI_VL_PRECO3 { get; set; }            // atual em PRODUTO_FILIAL
-    public DateTime? PRFI_DH_ULTATUBOLE { get; set; }
-    public bool Duplicado { get; set; }
-    public bool PrecoAplicado { get; set; }
-    public string DPCA_NM_REGRA { get; set; } = "";         // CosmosFL..desc_produto_cab
-    public bool RegraSempreExiste { get; set; }
-    public DateTime? DPCA_DT_INCLUSDSC { get; set; }
-    public decimal? DPCA_PR_DESCPRD { get; set; }
-}
-
 // Resposta do GET /api/testes/produto-filial?filialId=&boletimId=: estado atual de PRODUTO_FILIAL dos produtos do boletim.
 // Chame antes e depois de processar e compare por ProdutoId.
 public class ProdutoFilialBoletimRespostaTeste

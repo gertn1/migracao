@@ -16,51 +16,6 @@ public class SqlConnectionFactory(IConfiguration config) : IDbConnectionFactory
 /// </summary>
 public class BoletimRepository : IBoletimRepository
 {
-    // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Validação de existência do boletim e leitura do cabeçalho (BOLETIM_PRECO_CAB)
-    // DE-PARA: o "IF @@ROWCOUNT = 0 -> retorno 1" passa a ser "resultado == null" no service.
-    public async Task<BoletimCabecalho?> ObterCabecalhoAsync(IDbConnection c, IDbTransaction? tx, int boletimId)
-    {
-        const string sql = @"
-            SELECT BOPC_SQ_BOLETIM,
-                   BOPC_DT_INIPREPRO,
-                   BOPC_DT_FIMPREPRO,
-                   BOPC_NM_PROCESSGER,
-                   BOLETIM_PRODUTOS_ACORDO,
-                   BOLETIM_DEMANDTEC,
-                   BOLETIM_PROFIMETRICS,
-                   ATUALIZAR_PRECO_ECOMMERCE
-            FROM BOLETIM_PRECO_CAB WITH (NOLOCK)
-            WHERE BOPC_SQ_BOLETIM = @boletimId";
-
-        var row = await c.QueryFirstOrDefaultAsync<CabecalhoRow>(sql, new { boletimId }, tx);
-        if (row is null) return null;
-
-        // Os ISNULL(...,'N') / ISNULL(...,0) da procedure viraram tratamento de nulo em C#.
-        return new BoletimCabecalho
-        {
-            BOPC_SQ_BOLETIM = row.BOPC_SQ_BOLETIM,
-            BOPC_DT_INIPREPRO = row.BOPC_DT_INIPREPRO,
-            BOPC_DT_FIMPREPRO = row.BOPC_DT_FIMPREPRO,
-            BOPC_NM_PROCESSGER = row.BOPC_NM_PROCESSGER,
-            BOLETIM_PRODUTOS_ACORDO = row.BOLETIM_PRODUTOS_ACORDO ?? false,
-            BOLETIM_DEMANDTEC = row.BOLETIM_DEMANDTEC ?? "N",
-            BOLETIM_PROFIMETRICS = row.BOLETIM_PROFIMETRICS ?? "N",
-            ATUALIZAR_PRECO_ECOMMERCE = row.ATUALIZAR_PRECO_ECOMMERCE ?? false
-        };
-    }
-
-    private class CabecalhoRow
-    {
-        public int BOPC_SQ_BOLETIM { get; set; }
-        public DateTime? BOPC_DT_INIPREPRO { get; set; }
-        public DateTime? BOPC_DT_FIMPREPRO { get; set; }
-        public string? BOPC_NM_PROCESSGER { get; set; }
-        public bool? BOLETIM_PRODUTOS_ACORDO { get; set; }
-        public string? BOLETIM_DEMANDTEC { get; set; }
-        public string? BOLETIM_PROFIMETRICS { get; set; }
-        public bool? ATUALIZAR_PRECO_ECOMMERCE { get; set; }
-    }
-
     // [MIGRAÇÃO DA PROCEDURE - FASE 1]: Leitura do tipo de custo em PARAMETRO_PRECO (sem linha => retorno 2)
     // retorna 'U', 'C' ou 'M'
     public async Task<char?> ObterTipoCustoAsync(IDbConnection c, IDbTransaction? tx)

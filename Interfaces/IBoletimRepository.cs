@@ -5,7 +5,6 @@ namespace PrecificacaoPoc.Interfaces;
 
 public interface IBoletimRepository
 {
-    Task<BoletimCabecalho?> ObterCabecalhoAsync(IDbConnection c, IDbTransaction? tx, int boletimId);
     Task<char?> ObterTipoCustoAsync(IDbConnection c, IDbTransaction? tx);
     Task<List<EstadoProdutoFilial>> ObterEstadoProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, IEnumerable<int> produtoIds);
     Task<int> AtualizarProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<ProdutoFilialAtualizacao> lote);
