@@ -7,23 +7,24 @@ namespace PrecificacaoPoc.Domain.ApenasTestes;
 // ║ sem impacto nas regras de negócio.                                                   ║
 // ╚══════════════════════════════════════════════════════════════════════════════════════╝
 
-// Resposta do GET /api/testes/boletins/{boletimId}: o que o boletim contém, sem processar nada
-public class ConsultaBoletimResposta
+// Resposta do GET /api/testes/boletins/{boletimId}: o boletim como está nas tabelas, sem processar nada e sem PRODUTO_FILIAL.
+// No agrupamento do POST (cab, det, env), só com as colunas que a procedure usa (MapaColunasBoletimTeste),
+// cada uma com o nome da própria coluna.
+public class BoletimCompletoTeste
 {
-    public int BoletimId { get; set; }
-    public int FilialId { get; set; }
-    public BoletimCabecalho Cabecalho { get; set; } = new();
-    public char? TipoCusto { get; set; }
-    public List<ItemBoletim> Itens { get; set; } = new();
+    public int BOPC_SQ_BOLETIM { get; set; }
+    public IDictionary<string, object?>? Cab { get; set; }                       // BOLETIM_PRECO_CAB (1 linha)
+    public List<IDictionary<string, object?>> Det { get; set; } = new();         // BOLETIM_PRECO_DET (itens)
+    public List<IDictionary<string, object?>> Env { get; set; } = new();         // BOLETIM_PRECO_ENV (filiais do boletim)
 }
 
 // Resposta do GET /api/testes/boletins/{boletimId}/genericos-ia/status: se a sp_AtualizaPrecoVendaGenericosEstruturaSempre
 // já aplicou o boletim (preço no PRODUTO_FILIAL igual ao do boletim + regra "Desconto em Genérico" em CosmosFL)
 public class StatusGenericosIaResposta
 {
-    public int BoletimId { get; set; }
-    public int FilialId { get; set; }
-    public string? ProcessoGerador { get; set; }
+    public int BOPC_SQ_BOLETIM { get; set; }
+    public int FILI_CD_FILIAL { get; set; }
+    public string? BOPC_NM_PROCESSGER { get; set; }
     public bool EhGenericosIa { get; set; }
     public int TotalItens { get; set; }
     public int ItensIgnoradosDuplicados { get; set; }
@@ -36,44 +37,81 @@ public class StatusGenericosIaResposta
 
 public class StatusItemGenericosIa
 {
-    public int ProdutoId { get; set; }
-    public decimal? PrecoVendaBoletim { get; set; }
-    public decimal? PrecoVenda3Boletim { get; set; }
-    public decimal? PrecoVendaAtual { get; set; }
-    public decimal? Preco3Atual { get; set; }
-    public DateTime? DhUltimaAtualizacaoBoletim { get; set; }
+    public int BOPD_CD_PRODUTO_productId { get; set; }
+    public decimal? BOPD_VL_PRCVENDA_salePrice { get; set; }          // no boletim
+    public decimal? BOPD_VL_PRCVENDA3_semprePrice { get; set; }         // no boletim
+    public decimal? PRFI_VL_PRECOVENDA_BOPD_VL_PRCVENDA_salePrice { get; set; }   // enviado no boletim
+    public decimal? PRFI_VL_PRECOVENDA { get; set; }        // atual em PRODUTO_FILIAL
+    public decimal? PRFI_VL_PRECO3_BOPD_VL_PRCVENDA3_semprePrice { get; set; }   // enviado no boletim
+    public decimal? PRFI_VL_PRECO3 { get; set; }            // atual em PRODUTO_FILIAL
+    public DateTime? PRFI_DH_ULTATUBOLE { get; set; }
     public bool Duplicado { get; set; }
     public bool PrecoAplicado { get; set; }
-    public string NomeRegraSempre { get; set; } = "";
+    public string DPCA_NM_REGRA { get; set; } = "";         // CosmosFL..desc_produto_cab
     public bool RegraSempreExiste { get; set; }
-    public DateTime? RegraSempreDtInclusao { get; set; }
-    public decimal? RegraSempreDescontoPercentual { get; set; }
+    public DateTime? DPCA_DT_INCLUSDSC { get; set; }
+    public decimal? DPCA_PR_DESCPRD { get; set; }
 }
 
-// Estado atual de PRODUTO_FILIAL (GET /api/testes/produto-filial/{filialId}/{produtoId}),
-// para comparar antes/depois da procedure original ou da simulação
-public class ProdutoFilialAtual
+// Resposta do GET /api/testes/produto-filial?filialId=&boletimId=: estado atual de PRODUTO_FILIAL dos produtos do boletim.
+// Chame antes e depois de processar e compare por ProdutoId.
+public class ProdutoFilialBoletimRespostaTeste
 {
-    public int ProdutoId { get; set; }
-    public int FilialId { get; set; }
-    public decimal? PrecoVenda { get; set; }
-    public decimal? Preco1 { get; set; }
-    public decimal? Preco2 { get; set; }
-    public decimal? Preco3 { get; set; }
-    public decimal? Preco6 { get; set; }
-    public decimal? Preco9 { get; set; }
-    public decimal? MbePrcVen { get; set; }
-    public decimal? MbePreco9 { get; set; }
-    public decimal? PrecoMaxConsumidor { get; set; }
-    public decimal? Ucg { get; set; }
-    public decimal? Cmpg { get; set; }
-    public decimal? PrcProm { get; set; }
-    public DateTime? DtIniPrcProm { get; set; }
-    public DateTime? DtFimPrcProm { get; set; }
-    public decimal? MargAntPmc { get; set; }
-    public decimal? MargCalPmc { get; set; }
-    public decimal? PrecoVendaEcommerce { get; set; }
-    public decimal? PrecoPromocaoEcommerce { get; set; }
-    public DateTime? DtUltimaAtualizacaoPreco { get; set; }
-    public DateTime? DhUltimaAtualizacaoBoletim { get; set; }
+    public int BOPC_SQ_BOLETIM { get; set; }
+    public int FILI_CD_FILIAL { get; set; }
+    public List<ProdutoFilialTeste> Produtos { get; set; } = new();
+}
+
+// Um produto do boletim só com as colunas de PRODUTO_FILIAL que a procedure atualiza (custos e monitorado, que ela só lê, ficam de fora).
+// Todo produto do boletim aparece: quem a procedure ignoraria vem com ExisteNaFilial = false ou Duplicado = true
+// (e as colunas de PRODUTO_FILIAL nulas), em vez de sumir da lista.
+public class ProdutoFilialTeste
+{
+    public int PRME_CD_PRODUTO_BOPD_CD_PRODUTO_productId { get; set; }   // enviado no boletim
+    public int PRME_CD_PRODUTO { get; set; }
+    public bool ExisteNaFilial { get; set; }
+    public bool Duplicado { get; set; }       // está em COSMOSPRECOS.dbo.FUTURO_PRECO_DUPLICADO para o boletim/filial
+
+    // PRODUTO_FILIAL
+    public decimal? PRFI_VL_PRECOVENDA { get; set; }
+    public decimal? PRFI_VL_PRECO1_BOPD_VL_PRCVENDA1_totalPopularPharmacyPrice { get; set; }   // enviado no boletim
+    public decimal? PRFI_VL_PRECO1 { get; set; }
+    public decimal? PRFI_VL_PRECO2_BOPD_VL_PRCVENDA2_parcialPopularPharmacyPrice { get; set; }   // enviado no boletim
+    public decimal? PRFI_VL_PRECO2 { get; set; }
+    public decimal? PRFI_VL_PRECO3 { get; set; }
+    public decimal? PRFI_VL_PRECO6_BOPD_VL_PRCVENDA6_previousPrice { get; set; }   // enviado no boletim
+    public decimal? PRFI_VL_PRECO6 { get; set; }
+    public decimal? PRFI_VL_PRECO9 { get; set; }
+    public decimal? PRFI_PR_MBEPRCVEN { get; set; }
+    public decimal? PRFI_PR_MBEPRECO9 { get; set; }
+    public decimal? MARGEM_VENDA_PRECIFICACAO_salePricingMargin { get; set; }   // enviado no boletim
+    public decimal? MARGEM_VENDA_PRECIFICACAO { get; set; }
+    public decimal? MARGEM_PROMOCAO_PRECIFICACAO_promotionPricingMargin { get; set; }   // enviado no boletim
+    public decimal? MARGEM_PROMOCAO_PRECIFICACAO { get; set; }
+    public decimal? PRFI_PR_MARGANTPMC { get; set; }
+    public decimal? PRFI_PR_MARGCALPMC { get; set; }
+    public decimal? PRFI_VL_PRCPROM_BOPD_VL_PRCPROM_promotionalPrice { get; set; }   // enviado no boletim
+    public decimal? PRFI_VL_PRCPROM { get; set; }
+    public DateTime? PRFI_DT_INIPRCPROM { get; set; }
+    public DateTime? PRFI_DT_FIMPRCPROM { get; set; }
+    public decimal? PRECO_VENDA_ECOMMERCE { get; set; }
+    public decimal? PRECO_PROMOCAO_ECOMMERCE { get; set; }
+    public DateTime? DATA_INICIO_PROMOCAO_ECOMMERCE { get; set; }
+    public DateTime? DATA_FIM_PROMOCAO_ECOMMERCE { get; set; }
+    public decimal? MARGEM_VENDA_MAXIMO_ECOMMERCE { get; set; }
+    public DateTime? DATA_ATUALIZACAO_BOLETIM_ECOMMERCE { get; set; }
+    public DateTime? DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE { get; set; }
+    public string? ENCARTE_CLIENTE_SEMPRE_alwaysCustomerFlyer { get; set; }   // enviado no boletim
+    public string? ENCARTE_CLIENTE_SEMPRE { get; set; }
+    public DateTime? PRFI_DT_ULTAPRCVEN { get; set; }   // auditoria do UPDATE 7
+    public DateTime? PRFI_DH_ULTATUBOLE { get; set; }   // auditoria do UPDATE 7
+}
+
+// Resposta do GET /api/testes/boletins/{boletimId}/comparativo?filialId=: um JOIN entre o boletim (d./c.), PRODUTO_FILIAL (pf.)
+// e PRODUTO_MESTRE (pm.). Em cada item o campo do boletim vem seguido do campo equivalente da filial.
+public class BoletimComProdutoFilialRespostaTeste
+{
+    public int BOPC_SQ_BOLETIM { get; set; }
+    public int FILI_CD_FILIAL { get; set; }
+    public List<IDictionary<string, object?>> Itens { get; set; } = new();
 }

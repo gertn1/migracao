@@ -1,13 +1,10 @@
-using System.Data;
 using PrecificacaoPoc.Domain;
 using PrecificacaoPoc.Helpers;
 using PrecificacaoPoc.Interfaces;
+using System.Data;
 
 namespace PrecificacaoPoc.Services;
 
-/// <summary>
-/// Orquestrador: reimplementa em C# o fluxo completo da sp_CsmPrecoAtlzBoletim (Fases 1 a 6).
-/// </summary>
 public class BoletimPrecoService(
     IDbConnectionFactory connectionFactory,
     IBoletimRepository repo,
@@ -16,22 +13,50 @@ public class BoletimPrecoService(
     ILogger<BoletimPrecoService> log)
 {
     private const string ProcessoGenericosIa = "GENERICOS IA";
-    private const string ProcessoFarmaciaExclusao = "Farmacia Popular - exclusao";
-    private const string ProcessoFarmaciaAlteracao = "Farmacia Popular - alteracao";
+    private const string ProcessoFarmaciaExclusao = "FARMACIA POPULAR - EXCLUSAO";
+    private const string ProcessoFarmaciaAlteracao = "FARMACIA POPULAR - ALTERACAO";
 
-    public async Task<ResultadoProcessamento> ProcessarAsync(ProcessarBoletimRequest req)
+    public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, BoletimCabecalho cab, List<ItemBoletim> boletim, int usuarioId, bool simularApenas)
     {
-        var resultado = new ResultadoProcessamento { Simulado = req.SimularApenas };
+        if (cab.ProcessoGeradorNormalizado == ProcessoGenericosIa)
+            return await ProcessarAsync(filialId, cab, new List<ItemComEstado>(), usuarioId, simularApenas);
+
+        List<EstadoProdutoFilial> estados;
+        using (var conn = connectionFactory.Criar())
+        {
+            conn.Open();
+            // Fase 3 da procedure (JOINs com PRODUTO_FILIAL/PRODUTO_MESTRE + NOT EXISTS em FUTURO_PRECO_DUPLICADO): busca só custo, PMC, Preço 9 atual e Monitorado.
+            // Produto que não existe na filial ou está duplicado não volta, como no INNER JOIN da procedure.
+            estados = await repo.ObterEstadoProdutoFilialAsync(conn, null, filialId, cab.BOPC_SQ_BOLETIM, boletim.Select(i => i.BOPD_CD_PRODUTO));
+        }
+
+        // JOIN da Fase 3: só entra no processamento o produto do boletim que voltou do banco (existe na filial e não está duplicado)
+        var estadoPorProduto = estados.ToDictionary(e => e.PRME_CD_PRODUTO);
+
+        var itens = new List<ItemComEstado>();
+        foreach (var item in boletim)
+        {
+            if (!estadoPorProduto.ContainsKey(item.BOPD_CD_PRODUTO))
+                continue;
+
+            var estado = estadoPorProduto[item.BOPD_CD_PRODUTO];
+            itens.Add(new ItemComEstado(item, estado));
+        }
+
+        return await ProcessarAsync(filialId, cab, itens, usuarioId, simularApenas);
+    }
+
+    public async Task<ResultadoProcessamento> ProcessarAsync(int filialId, BoletimCabecalho cab, List<ItemComEstado> det, int usuarioId, bool simularApenas)
+    {
+        var resultado = new ResultadoProcessamento { Simulado = simularApenas, FILI_CD_FILIAL = filialId };
         using var conn = connectionFactory.Criar();
         conn.Open();
 
-        // simularApenas = true: transação aberta desde o início; TUDO (inclusive as SPs auxiliares, que usam a mesma
-        // conexão) participa dela e termina em ROLLBACK incondicional. Modo real: transação só na Fase 4, como na procedure.
-        IDbTransaction? txSimulacao = req.SimularApenas ? conn.BeginTransaction() : null;
+        IDbTransaction? txSimulacao = simularApenas ? conn.BeginTransaction() : null;
 
         try
         {
-            var retorno = await ExecutarFluxoAsync(conn, txSimulacao, req, resultado);
+            var retorno = await ExecutarFluxoAsync(conn, txSimulacao, filialId, cab, det, usuarioId, resultado);
             Finalizar(resultado, retorno);
             return resultado;
         }
@@ -47,34 +72,30 @@ public class BoletimPrecoService(
     }
 
     private async Task<RetornoProcessamento> ExecutarFluxoAsync(
-        IDbConnection conn, IDbTransaction? txSim, ProcessarBoletimRequest req, ResultadoProcessamento resultado)
+        IDbConnection conn, IDbTransaction? txSim, int filialId, BoletimCabecalho cab, List<ItemComEstado> itens, int usuarioId, ResultadoProcessamento resultado)
     {
-        // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 1]: Validação de existência do boletim e leitura do tipo de custo em PARAMETRO_PRECO
-        var cab = await repo.ObterCabecalhoAsync(conn, txSim, req.BoletimId);
-        if (cab is null) return RetornoProcessamento.BoletimNaoExiste;            // @numRetorno = 1
-
+        // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 1]: Leitura do tipo de custo em PARAMETRO_PRECO (a existência do boletim é validada por quem carrega o cab)
         var tipoCustoChar = await repo.ObterTipoCustoAsync(conn, txSim);
-        if (tipoCustoChar is null) return RetornoProcessamento.ParametroPrecoNaoCadastrado; // @numRetorno = 2
+        if (tipoCustoChar is null) return RetornoProcessamento.ParametroPrecoNaoCadastrado;
         var tipoCusto = (TipoCusto)tipoCustoChar.Value;
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 2]: Desvio condicional quando o processo gerador for 'GENERICOS IA'
-        if (cab.ProcessoGerador == ProcessoGenericosIa)
+        if (cab.ProcessoGeradorNormalizado == ProcessoGenericosIa)
         {
-            int ret = await regrasSempre.AtualizarGenericosIaAsync(conn, txSim, req.BoletimId, req.FilialId, req.UsuarioId);
+            int ret = await regrasSempre.AtualizarGenericosIaAsync(conn, txSim, cab.BOPC_SQ_BOLETIM, filialId, usuarioId);
             resultado.Observacoes.Add("Processo GENERICOS IA: delegado integralmente à sp_AtualizaPrecoVendaGenericosEstruturaSempre (fluxo da procedure original).");
             return (RetornoProcessamento)ret;
         }
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 3]: Materialização dos itens + cálculos inline (substitui CURSOR + #BoletimCalc)
-        var itens = await repo.ObterItensAsync(conn, txSim, req.FilialId, req.BoletimId);
         resultado.TotalItensLidos = itens.Count;
-        if (itens.Count == 0) return RetornoProcessamento.Sucesso;
+        if (itens.Count == 0) return RetornoProcessamento.ItensNaoEncontrados;
 
         // Verifica se BoletimProfimetrics é iagual a 'N'"e @regBOPC_NM_PROCESSGER =/= 'MANUAL' (ou seja, se deve arredondar ou não)
         var agora = DateTime.Now;
         bool arredonda = PrecoCalculator.DeveArredondar(cab);
 
-        var calculados = itens.Select(i => Calcular(i, tipoCusto, arredonda, req.FilialId)).ToList();
+        var calculados = itens.Select(i => Calcular(i, tipoCusto, arredonda, filialId)).ToList();
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 4]: Aplicação em PRODUTO_FILIAL (transação explícita)
         // Para cada item monta a linha de UPDATE (lote41) e, ao mesmo tempo, a linha do comparativo devolvido na API.
@@ -84,7 +105,7 @@ public class BoletimPrecoService(
         foreach (var calculado in calculados)
         {
             // Montar devolve null quando o item não tem preço de venda nem promoção (WHERE do UPDATE da procedure)
-            var atualizacao = AtualizacaoProdutoFilialBuilder.Montar(calculado, cab, req.FilialId, agora);
+            var atualizacao = AtualizacaoProdutoFilialBuilder.Montar(calculado, cab, filialId, agora);
 
             if (atualizacao is not null)
                 lote41.Add(atualizacao);
@@ -102,30 +123,30 @@ public class BoletimPrecoService(
             await repo.AtualizarProdutoFilialAsync(conn, tx, lote41);
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão
-            if (cab.ProcessoGerador == ProcessoFarmaciaExclusao)
+            if (cab.ProcessoGeradorNormalizado == ProcessoFarmaciaExclusao)
             {
                 var atualizacoes = itens
-                 .Select(item => AtualizacaoProdutoFilialBuilder.FarmaciaExclusao(item, req.FilialId, agora))
+                 .Select(x => AtualizacaoProdutoFilialBuilder.FarmaciaExclusao(x.Item, filialId, agora))
                  .ToList();
 
                 await repo.AtualizarFarmaciaPopularExclusaoAsync(conn, tx, atualizacoes);
             }
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração
-            if (cab.ProcessoGerador == ProcessoFarmaciaAlteracao)
+            if (cab.ProcessoGeradorNormalizado == ProcessoFarmaciaAlteracao)
             {
                 var atualizacoes = itens
-                    .Select(item => AtualizacaoProdutoFilialBuilder.FarmaciaAlteracao(item, req.FilialId, agora))
+                    .Select(x => AtualizacaoProdutoFilialBuilder.FarmaciaAlteracao(x.Item, filialId, agora))
                     .ToList();
 
                 await repo.AtualizarFarmaciaPopularAlteracaoAsync(conn, tx, atualizacoes);
             }
 
             // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo
-            if (cab.ProdutosAcordo == true)
+            if (cab.BOLETIM_PRODUTOS_ACORDO)
             {
                 var atualizacoes = itens
-                    .Select(item => AtualizacaoProdutoFilialBuilder.Acordo(item, cab, req.FilialId, agora))
+                    .Select(x => AtualizacaoProdutoFilialBuilder.Acordo(x.Item, cab, filialId, agora))
                     .ToList();
 
                 await repo.AtualizarProdutosAcordoAsync(conn, tx, atualizacoes);
@@ -137,7 +158,7 @@ public class BoletimPrecoService(
         catch (Exception ex)
         {
             // BEGIN CATCH: ROLLBACK + @numRetorno = 4
-            log.LogError(ex, "Erro na Fase 4 (boletim {Boletim}, filial {Filial})", req.BoletimId, req.FilialId);
+            log.LogError(ex, "Erro na Fase 4 (boletim {Boletim}, filial {Filial})", cab.BOPC_SQ_BOLETIM, filialId);
             try { txReal?.Rollback(); } catch (InvalidOperationException) { }
             resultado.Observacoes.Add($"Erro na atualização do produto_filial: {ex.Message}");
             return RetornoProcessamento.ErroAtualizacaoProdutoFilial;
@@ -148,47 +169,52 @@ public class BoletimPrecoService(
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Demandtec/Profimetrics)
         // Fora da transação principal no modo real (as SPs auxiliares têm transações próprias); dentro da simulação, para o ROLLBACK cobrir tudo.
-        await ExecutarRegrasSempreAsync(conn, txSim, cab, req, calculados, resultado);
+        await ExecutarRegrasSempreAsync(conn, txSim, cab, filialId, calculados, resultado);
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 6]: Retorno final sempre 0 (SET @numRetorno = 0), como na procedure
         return RetornoProcessamento.Sucesso;
     }
 
     // [MIGRAÇÃO DA PROCEDURE - FASE 3]: Montagem de uma linha da #BoletimCalc (custo, Preço 9, margens, arredondamento)
-    private ItemCalculado Calcular(ItemBoletim i, TipoCusto tipoCusto, bool arredonda, int filialId)
+    private ItemCalculado Calcular(ItemComEstado itemComEstado, TipoCusto tipoCusto, bool arredonda, int filialId)
     {
+        var (i, estado) = itemComEstado;
+
         // [FASE 3]: Substituição do CROSS APPLY de custo (U, C, M) por switch expression em C#
-        decimal? custo = PrecoCalculator.ResolverCusto(tipoCusto, i.PfUcg, i.PfCmpg);
+        decimal? custo = PrecoCalculator.ResolverCusto(tipoCusto, estado.PRFI_VL_UCG, estado.PRFI_VL_CMPG);
 
         // [FASE 3]: Substituição do cálculo inline do Preço 9 (+5% ou PMC) para método C#
-        decimal? preco9 = PrecoCalculator.CalcularPreco9(i);
+        decimal? preco9 = PrecoCalculator.CalcularPreco9(i, estado);
+
+        // Preço de venda normalizado uma vez só (CONVERT NUMERIC(12,2)); null quando o boletim não trouxe venda > 0
+        decimal? venda = i.TemPrecoVenda ? PrecoCalculator.ArredondarNumeric(i.BOPD_VL_PRCVENDA!.Value, 2) : null;
 
         // [FASE 3]: Migração da fórmula de Margem MBE com teto em 999.99%
-        decimal? margemPreco9 = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemPreco9(preco9, custo) : null;
-        decimal? mbePrcVen = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemMbe(PrecoCalculator.ArredondarNumeric(i.PrcVenda!.Value, 2), custo) : null;
+        decimal? margemPreco9 = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemPreco9(preco9, custo) : null; // MARGEM_PRECO9
+        decimal? mbePrcVen = i.TemPrecoVenda ? PrecoCalculator.CalcularMargemMbe(venda!.Value, custo) : null; // MBE_PRCVEN
 
-        // [FASE 4]: PRECO_VENDA_CALC -> dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1
-        decimal? precoVendaCalc = i.TemPrecoVenda
-            ? (arredonda ? arredondador.Arredondar(i.PrcVenda!.Value, filialId) : PrecoCalculator.ArredondarNumeric(i.PrcVenda!.Value, 2)) : null;
+        // [FASE 4]: PRECO_VENDA_CALC -> dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1; senão o próprio valor normalizado
+        decimal? precoVendaCalc = i.TemPrecoVenda && arredonda ? arredondador.Arredondar(venda!.Value, filialId) : venda;
 
         return new ItemCalculado
         {
             Item = i,
-            Arredonda = arredonda,
-            PrecoVendaCalc = precoVendaCalc,
-            Preco9Calc = preco9,
-            MargemPreco9 = margemPreco9,
-            MbePrcVen = mbePrcVen
+            Estado = estado,
+            FL_ARREDONDA = arredonda,
+            PRECO_VENDA_CALC = precoVendaCalc,
+            PRECO9_CALC = preco9,
+            MARGEM_PRECO9 = margemPreco9,
+            MBE_PRCVEN = mbePrcVen
         };
     }
 
     private async Task ExecutarRegrasSempreAsync(
-        IDbConnection conn, IDbTransaction? tx, BoletimCabecalho cab, ProcessarBoletimRequest req,
+        IDbConnection conn, IDbTransaction? tx, BoletimCabecalho cab, int filialId,
         List<ItemCalculado> calculados, ResultadoProcessamento resultado)
     {
         // Filtro dos dois cursores (idêntico nos dois): WHERE ISNULL(PRECO_MAXIMO_CONSUMIDOR,0) > 0 AND ISNULL(BOPD_VL_PRCVENDA3,0) > 0
         var elegiveis = calculados
-            .Where(c => c.Item.PrecoMaximoConsumidor is > 0 && c.Item.PrcVenda3 is > 0)
+            .Where(c => c.Item.PRECO_MAXIMO_CONSUMIDOR is > 0 && c.Item.BOPD_VL_PRCVENDA3 is > 0)
             .Select(c => c.Item)
             .ToList();
 
@@ -198,13 +224,13 @@ public class BoletimPrecoService(
             foreach (var item in elegiveis)
             {
                 // SET @auxPreco3 = DBO.fn_ARREDONDA_PRECO_VENDA_MONITORADO(@auxPreco3, @COD_FILIAL)
-                decimal preco3 = arredondador.Arredondar(item.PrcVenda3!.Value, req.FilialId);
+                decimal preco3 = arredondador.Arredondar(item.BOPD_VL_PRCVENDA3!.Value, filialId);
 
                 // EXEC sp_AtualizaRegrasSempreDemandtec @auxProduto, @COD_FILIAL, @auxPMC, @auxPreco3, @retornoSempre OUTPUT
                 int retorno = await regrasSempre.AtualizarRegraDemandtecAsync(
-                    conn, tx, item.ProdutoId, req.FilialId, item.PrecoMaximoConsumidor!.Value, preco3);
+                    conn, tx, item.BOPD_CD_PRODUTO, filialId, item.PRECO_MAXIMO_CONSUMIDOR!.Value, preco3);
 
-                if (retorno != 0) resultado.Observacoes.Add($"Demandtec produto {item.ProdutoId}: retorno {retorno}");
+                if (retorno != 0) resultado.Observacoes.Add($"Demandtec produto {item.BOPD_CD_PRODUTO}: retorno {retorno}");
             }
             resultado.Observacoes.Add($"Regras Demandtec executadas para {elegiveis.Count} item(ns).");
         }
@@ -214,12 +240,12 @@ public class BoletimPrecoService(
         {
             foreach (var item in elegiveis)
             {
-                decimal preco3 = arredondador.Arredondar(item.PrcVenda3!.Value, req.FilialId);
+                decimal preco3 = arredondador.Arredondar(item.BOPD_VL_PRCVENDA3!.Value, filialId);
 
                 int retorno = await regrasSempre.AtualizarRegraProfimetricsAsync(
-                    conn, tx, item.ProdutoId, req.FilialId, item.PrecoMaximoConsumidor!.Value, preco3);
+                    conn, tx, item.BOPD_CD_PRODUTO, filialId, item.PRECO_MAXIMO_CONSUMIDOR!.Value, preco3);
 
-                if (retorno != 0) resultado.Observacoes.Add($"Profimetrics produto {item.ProdutoId}: retorno {retorno}");
+                if (retorno != 0) resultado.Observacoes.Add($"Profimetrics produto {item.BOPD_CD_PRODUTO}: retorno {retorno}");
             }
             resultado.Observacoes.Add($"Regras Profimetrics executadas para {elegiveis.Count} item(ns).");
         }
@@ -227,14 +253,17 @@ public class BoletimPrecoService(
 
     private static ItemComparativo ParaComparativo(ItemCalculado c, ProdutoFilialAtualizacao? u) => new()
     {
-        ProdutoId = c.Item.ProdutoId,
-        PrecoVendaAnterior = c.Item.PfPrecoVenda,
-        NovoPrecoVenda = u?.PrecoVenda ?? c.Item.PfPrecoVenda,
-        Preco9Anterior = c.Item.PfPreco9,
-        NovoPreco9 = u?.Preco9 ?? c.Item.PfPreco9,
-        MargemMbe = u?.MbePrcVen ?? c.Item.PfMbePrcVen,
-        MargemMbePreco9 = u?.MbePreco9 ?? c.Item.PfMbePreco9,
-        NovaPromocao = u?.PrcProm ?? c.Item.PfPrcProm,
+        PRME_CD_PRODUTO_BOPD_CD_PRODUTO_productId = c.Item.BOPD_CD_PRODUTO,
+        PRFI_VL_PRECOVENDA_BOPD_VL_PRCVENDA_salePrice = c.Item.BOPD_VL_PRCVENDA,
+        PRFI_VL_PRCPROM_BOPD_VL_PRCPROM_promotionalPrice = c.Item.BOPD_VL_PRCPROM,
+        PRME_CD_PRODUTO = c.Item.BOPD_CD_PRODUTO,
+        // Só vêm preenchidos os valores que o UPDATE grava; null = o boletim não alterou aquele dado
+        PRFI_VL_PRECOVENDA = u?.PRFI_VL_PRECOVENDA,
+        PRFI_VL_PRECO9_ANTERIOR = c.Estado.PRFI_VL_PRECO9,
+        PRFI_VL_PRECO9 = u?.PRFI_VL_PRECO9 ?? c.Estado.PRFI_VL_PRECO9,
+        PRFI_PR_MBEPRCVEN = u?.PRFI_PR_MBEPRCVEN,
+        PRFI_PR_MBEPRECO9 = u?.PRFI_PR_MBEPRECO9,
+        PRFI_VL_PRCPROM = c.Item.TemPromocao ? c.Item.BOPD_VL_PRCPROM : null,
         Atualizado = u is not null
     };
 

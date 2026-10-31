@@ -1,5 +1,6 @@
 using PrecificacaoPoc.Endpoints;
 using PrecificacaoPoc.Endpoints.ApenasTestes;
+using PrecificacaoPoc.Helpers;
 using PrecificacaoPoc.Infrastructure;
 using PrecificacaoPoc.Infrastructure.ApenasTestes;
 using PrecificacaoPoc.Interfaces;
@@ -11,6 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 // --- 1. Adicionar os serviços do Swagger/Endpoints ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// camelCase para o que é do POST (usuarioId, cab, productId...), mas nomes de coluna (BOPD_CD_PRODUTO, PRFI_VL_PRECO9...) saem como estão.
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = new NomeColunaPreservadoPolicy());
 
 builder.Services.AddSingleton<IDbConnectionFactory, SqlConnectionFactory>();
 builder.Services.AddScoped<IBoletimRepository, BoletimRepository>();

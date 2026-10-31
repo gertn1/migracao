@@ -3,105 +3,75 @@ using PrecificacaoPoc.Domain;
 namespace PrecificacaoPoc.Helpers;
 
 /// <summary>
-/// Resolve em C# todos os CASE / ISNULL / "ELSE pf.coluna" do UPDATE gigante (FASE 4.1) e dos UPDATEs 4.2-4.4.
-/// O banco passa a receber apenas o valor final de cada coluna.
+/// Monta os valores dos UPDATEs da FASE 4 (4.1 a 4.4) a partir do item calculado.
+/// Aqui ficam só os valores e os flags; quem decide em quais UPDATEs cada produto entra é o repositório.
 /// </summary>
 public static class AtualizacaoProdutoFilialBuilder
 {
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Substituição do UPDATE gigante da procedure (montagem dos valores finais).
+    // [MIGRAÇÃO DA PROCEDURE - FASE 4.1]: Substituição do UPDATE gigante da procedure (montagem dos valores).
     // Retorna null quando a linha não satisfaz o WHERE (PRCVENDA > 0 OR PRCPROM > 0).
     public static ProdutoFilialAtualizacao? Montar(ItemCalculado calc, BoletimCabecalho cab, int filialId, DateTime agora)
     {
         var b = calc.Item;
-        bool temVenda = b.TemPrecoVenda;
-        bool temProm = b.TemPromocao;
-        bool ecommerce = cab.AtualizarPrecoEcommerce;
 
-        if (!temVenda && !temProm) return null; // WHERE (venda > 0) OR (promoção > 0)
+        if (!b.TemPrecoVenda && !b.TemPromocao) return null; // WHERE (venda > 0) OR (promoção > 0)
 
         return new ProdutoFilialAtualizacao
         {
-            FilialId = filialId,
-            ProdutoId = b.ProdutoId,
+            FILI_CD_FILIAL = filialId,
+            PRME_CD_PRODUTO = b.BOPD_CD_PRODUTO,
 
-            // ─── PREÇO DE VENDA ─── (PRECO_VENDA_CALC já passou pelo arredondamento)
-            PrecoVenda = temVenda ? calc.PrecoVendaCalc : b.PfPrecoVenda,
+            TemVenda = b.TemPrecoVenda,
+            TemPromocao = b.TemPromocao,
+            Ecommerce = cab.ATUALIZAR_PRECO_ECOMMERCE,
 
-            // ─── PREÇO 3 ─── ISNULL(BOPD_VL_PRCVENDA3, pf.PRFI_VL_PRECO3) (os dois ramos do CASE original são equivalentes)
-            Preco3 = temVenda ? (b.PrcVenda3 ?? b.PfPreco3) : b.PfPreco3,
+            PRFI_VL_PRECOVENDA = calc.PRECO_VENDA_CALC, // já passou pelo arredondamento
+            PRFI_VL_PRECO3 = b.BOPD_VL_PRCVENDA3,
+            PRFI_VL_PRECO6 = b.BOPD_VL_PRCVENDA6,       // sobrescreve inclusive com NULL, como na procedure
+            PRFI_VL_PRECO9 = calc.PRECO9_CALC,
+            PRFI_PR_MBEPRCVEN = calc.MBE_PRCVEN,
+            PRFI_PR_MBEPRECO9 = calc.MARGEM_PRECO9,
+            MARGEM_VENDA_PRECIFICACAO = b.MARGEM_VENDA_PRECIFICACAO,
+            PRFI_PR_MARGCALPMC = b.PERCENTUAL_DESCONTO_EMBUTIDO,
 
-            // ─── PREÇO 6 ─── (sobrescreve inclusive com NULL, como na procedure)
-            Preco6 = temVenda ? b.PrcVenda6 : b.PfPreco6,
+            PRFI_VL_PRCPROM = b.BOPD_VL_PRCPROM,
+            PRFI_DT_INIPRCPROM = cab.BOPC_DT_INIPREPRO,
+            PRFI_DT_FIMPRCPROM = cab.BOPC_DT_FIMPREPRO,
+            MARGEM_PROMOCAO_PRECIFICACAO = b.MARGEM_PROMOCAO_PRECIFICACAO,
+            ENCARTE_CLIENTE_SEMPRE = b.ENCARTE_CLIENTE_SEMPRE,
 
-            // ─── PREÇO 9 / MARGENS MBE ───
-            Preco9 = temVenda ? calc.Preco9Calc : b.PfPreco9,
-            MbePrcVen = temVenda ? calc.MbePrcVen : b.PfMbePrcVen,
-            MbePreco9 = temVenda ? calc.MargemPreco9 : b.PfMbePreco9,
-
-            // ─── MARGEM PRECIFICAÇÃO (venda) ───
-            MargemVendaPrecificacao = temVenda && b.MargemVendaPrecificacao is not null
-                ? b.MargemVendaPrecificacao : b.PfMargemVendaPrecificacao,
-
-            // ─── DESCONTO EMBUTIDO (PMC) ─── ANT recebe o CAL antigo; CAL recebe o novo desconto
-            MargAntPmc = temVenda && b.DescontoEmbutido is not null
-                ? (b.PfMargCalPmc ?? b.PfMargAntPmc) : b.PfMargAntPmc,
-            MargCalPmc = temVenda ? (b.DescontoEmbutido ?? b.PfMargCalPmc) : b.PfMargCalPmc,
-
-            // ─── PROMOÇÃO ───
-            PrcProm = temProm ? b.PrcProm : b.PfPrcProm,
-            DtIniPrcProm = temProm ? cab.DtInicioPromocao : b.PfDtIniPrcProm,
-            DtFimPrcProm = temProm ? cab.DtFimPromocao : b.PfDtFimPrcProm,
-            MargemPromocaoPrecificacao = temProm && b.MargemPromocaoPrecificacao is not null
-                ? b.MargemPromocaoPrecificacao : b.PfMargemPromocaoPrecificacao,
-
-            // ─── E-COMMERCE ─── [FASE 4.1]: validação de E-commerce (ATUALIZAR_PRECO_ECOMMERCE = 1)
-            PrecoVendaEcommerce = ecommerce && temVenda ? calc.PrecoVendaCalc : b.PfPrecoVendaEcommerce,
-            PrecoPromocaoEcommerce = ecommerce && temProm ? b.PrcProm : b.PfPrecoPromocaoEcommerce,
-            DataInicioPromoEcommerce = ecommerce && temProm ? cab.DtInicioPromocao : b.PfDataInicioPromoEcommerce,
-            DataFimPromoEcommerce = ecommerce && temProm ? cab.DtFimPromocao : b.PfDataFimPromoEcommerce,
-            MargemVendaMaximoEcommerce = ecommerce
-                ? (b.DescontoEmbutido ?? b.PfMargCalPmc) : b.PfMargemVendaMaximoEcommerce,
-            DataAtualizacaoBoletimEcommerce = ecommerce ? agora : b.PfDataAtualizacaoBoletimEcommerce,
-            DataAlteracaoPrecoVendaEcommerce = ecommerce ? agora : b.PfDataAlteracaoPrecoVendaEcommerce,
-
-            // ─── ENCARTE CLIENTE SEMPRE ───
-            EncarteClienteSempre = temProm && b.EncarteClienteSempre is not null
-                ? b.EncarteClienteSempre : b.PfEncarteClienteSempre,
-
-            // ─── AUDITORIA ─── GETDATE() -> relógio único da execução
-            DataUltimaAtualizacao = agora
+            PRFI_DT_ULTAPRCVEN = agora, // GETDATE() -> relógio único da execução
+            PRFI_DH_ULTATUBOLE = agora
         };
     }
 
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão (PRECO1/PRECO2 = NULL)
+    // [MIGRAÇÃO DA PROCEDURE - FASE 4.2]: Farmácia Popular - exclusão (o UPDATE grava PRECO1/PRECO2 = NULL)
     public static PrecoFarmaciaPopularAtualizacao FarmaciaExclusao(ItemBoletim i, int filialId, DateTime agora) => new()
     {
-        FilialId = filialId,
-        ProdutoId = i.ProdutoId,
-        Preco1 = null,
-        Preco2 = null,
-        DataUltimaAtualizacao = agora
+        FILI_CD_FILIAL = filialId,
+        PRME_CD_PRODUTO = i.BOPD_CD_PRODUTO,
+        PRFI_DT_ULTAPRCVEN = agora
     };
 
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração (só troca se o boletim trouxe o preço)
+    // [MIGRAÇÃO DA PROCEDURE - FASE 4.3]: Farmácia Popular - alteração (null = o boletim não trouxe, a coluna fica como está)
     public static PrecoFarmaciaPopularAtualizacao FarmaciaAlteracao(ItemBoletim i, int filialId, DateTime agora) => new()
     {
-        FilialId = filialId,
-        ProdutoId = i.ProdutoId,
-        Preco1 = i.PrcVenda1 ?? i.PfPreco1,
-        Preco2 = i.PrcVenda2 ?? i.PfPreco2,
-        DataUltimaAtualizacao = agora
+        FILI_CD_FILIAL = filialId,
+        PRME_CD_PRODUTO = i.BOPD_CD_PRODUTO,
+        PRFI_VL_PRECO1 = i.BOPD_VL_PRCVENDA1,
+        PRFI_VL_PRECO2 = i.BOPD_VL_PRCVENDA2,
+        PRFI_DT_ULTAPRCVEN = agora
     };
 
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo
+    // [MIGRAÇÃO DA PROCEDURE - FASE 4.4]: Produtos acordo (null = a coluna fica como está; PRECO1 = 0 limpa o preço)
     public static PromocaoAcordoAtualizacao Acordo(ItemBoletim i, BoletimCabecalho cab, int filialId, DateTime agora) => new()
     {
-        FilialId = filialId,
-        ProdutoId = i.ProdutoId,
-        PrcProm = i.TemPromocao ? i.PrcProm : i.PfPrcProm,
-        DtIniPrcProm = cab.DtInicioPromocao ?? i.PfDtIniPrcProm,
-        DtFimPrcProm = cab.DtFimPromocao ?? i.PfDtFimPrcProm,
-        Preco1 = i.PrcVenda1 is null ? i.PfPreco1 : (i.PrcVenda1 == 0 ? null : i.PrcVenda1),
-        DataUltimaAtualizacao = agora
+        FILI_CD_FILIAL = filialId,
+        PRME_CD_PRODUTO = i.BOPD_CD_PRODUTO,
+        PRFI_VL_PRCPROM = i.TemPromocao ? i.BOPD_VL_PRCPROM : null,
+        PRFI_DT_INIPRCPROM = cab.BOPC_DT_INIPREPRO,
+        PRFI_DT_FIMPRCPROM = cab.BOPC_DT_FIMPREPRO,
+        PRFI_VL_PRECO1 = i.BOPD_VL_PRCVENDA1,
+        PRFI_DT_ULTAPRCVEN = agora
     };
 }

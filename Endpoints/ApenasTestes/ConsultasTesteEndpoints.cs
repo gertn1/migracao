@@ -15,27 +15,20 @@ public static class ConsultasTesteEndpoints
     {
         var grupo = app.MapGroup("/api/testes").WithTags("APENAS TESTES (não usar em produção)");
 
-        // Cabeçalho, tipo de custo e itens do boletim para a filial, sem processar nada
+        // O boletim completo (cab, det e env) como está nas tabelas, sem processar nada e sem PRODUTO_FILIAL
         grupo.MapGet("/boletins/{boletimId:int}",
-            async (int boletimId, int filialId, IDbConnectionFactory factory, IBoletimRepository repo) =>
+            async (int boletimId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
             {
-                if (filialId <= 0 || boletimId <= 0)
-                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+                if (boletimId <= 0)
+                    return Results.BadRequest(new { erro = "boletimId deve ser maior que zero." });
 
                 using var conn = factory.Criar();
                 conn.Open();
 
-                var cab = await repo.ObterCabecalhoAsync(conn, null, boletimId);
-                if (cab is null) return Results.NotFound(new { erro = $"Boletim {boletimId} não existe (retorno 1)." });
-
-                return Results.Ok(new ConsultaBoletimResposta
-                {
-                    BoletimId = boletimId,
-                    FilialId = filialId,
-                    Cabecalho = cab,
-                    TipoCusto = await repo.ObterTipoCustoAsync(conn, null),
-                    Itens = await repo.ObterItensAsync(conn, null, filialId, boletimId)
-                });
+                var boletim = await repo.ObterBoletimCompletoAsync(conn, null, boletimId);
+                return boletim is null
+                    ? Results.NotFound(new { erro = $"Boletim {boletimId} não existe (retorno 1)." })
+                    : Results.Ok(boletim);
             })
             .WithName("TesteConsultarBoletim");
 
@@ -55,18 +48,18 @@ public static class ConsultasTesteEndpoints
                 var itens = await repo.ObterStatusGenericosIaAsync(conn, null, filialId, boletimId);
                 foreach (var i in itens)
                     i.PrecoAplicado = !i.Duplicado
-                        && i.PrecoVendaBoletim is > 0
-                        && i.PrecoVendaAtual == i.PrecoVendaBoletim
-                        && i.Preco3Atual == i.PrecoVenda3Boletim;
+                        && i.BOPD_VL_PRCVENDA_salePrice is > 0
+                        && i.PRFI_VL_PRECOVENDA == i.BOPD_VL_PRCVENDA_salePrice
+                        && i.PRFI_VL_PRECO3 == i.BOPD_VL_PRCVENDA3_semprePrice;
 
                 var considerados = itens.Where(i => !i.Duplicado).ToList();
                 var aplicados = considerados.Count(i => i.PrecoAplicado);
 
                 return Results.Ok(new StatusGenericosIaResposta
                 {
-                    BoletimId = boletimId,
-                    FilialId = filialId,
-                    ProcessoGerador = cab.ProcessoGerador,
+                    BOPC_SQ_BOLETIM = boletimId,
+                    FILI_CD_FILIAL = filialId,
+                    BOPC_NM_PROCESSGER = cab.BOPC_NM_PROCESSGER,
                     EhGenericosIa = cab.ProcessoGeradorNormalizado == "GENERICOS IA",
                     TotalItens = itens.Count,
                     ItensIgnoradosDuplicados = itens.Count - considerados.Count,
@@ -78,19 +71,42 @@ public static class ConsultasTesteEndpoints
             })
             .WithName("TesteStatusGenericosIa");
 
-        // Estado atual do produto na filial, para comparar antes/depois
-        grupo.MapGet("/produto-filial/{filialId:int}/{produtoId:int}",
-            async (int filialId, int produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
+        // Estado atual dos produtos do boletim em PRODUTO_FILIAL, para comparar antes/depois de processar (produtoId opcional)
+        grupo.MapGet("/produto-filial",
+            async (int filialId, int boletimId, int? produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
             {
+                if (filialId <= 0 || boletimId <= 0)
+                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+
                 using var conn = factory.Criar();
                 conn.Open();
 
-                var atual = await repo.ObterProdutoFilialAsync(conn, null, filialId, produtoId);
-                return atual is null
-                    ? Results.NotFound(new { erro = $"Produto {produtoId} não encontrado na filial {filialId}." })
-                    : Results.Ok(atual);
+                var produtos = await repo.ObterProdutoFilialDoBoletimAsync(conn, null, filialId, boletimId, produtoId);
+                return Results.Ok(new ProdutoFilialBoletimRespostaTeste
+                {
+                    BOPC_SQ_BOLETIM = boletimId,
+                    FILI_CD_FILIAL = filialId,
+                    Produtos = produtos
+                });
             })
-            .WithName("TesteConsultarProdutoFilial");
+            .WithName("TesteConsultarProdutoFilialDoBoletim");
+
+        // JOIN boletim x PRODUTO_FILIAL x PRODUTO_MESTRE: o valor do boletim e o da filial, um embaixo do outro (produtoId opcional)
+        grupo.MapGet("/boletins/{boletimId:int}/comparativo",
+            async (int boletimId, int filialId, int? produtoId, IDbConnectionFactory factory, IConsultaTesteRepository repo) =>
+            {
+                if (filialId <= 0 || boletimId <= 0)
+                    return Results.BadRequest(new { erro = "filialId e boletimId devem ser maiores que zero." });
+
+                using var conn = factory.Criar();
+                conn.Open();
+
+                var itens = await repo.ObterBoletimComProdutoFilialAsync(conn, null, filialId, boletimId, produtoId);
+                return itens.Count == 0
+                    ? Results.NotFound(new { erro = $"Boletim {boletimId} não tem itens (ou o produto não está nele)." })
+                    : Results.Ok(new BoletimComProdutoFilialRespostaTeste { BOPC_SQ_BOLETIM = boletimId, FILI_CD_FILIAL = filialId, Itens = itens });
+            })
+            .WithName("TesteCompararBoletimComProdutoFilial");
 
         return app;
     }
