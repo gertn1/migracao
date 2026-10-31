@@ -7,72 +7,16 @@ public enum RetornoProcessamento
     // =========================================================================
     // RETORNOS GERADOS DIRETAMENTE PELA: sp_CsmPrecoAtlzBoletim (Procedure Principal)
     // =========================================================================
-
-    /// <summary>
-    /// Código 0: Execução concluída com sucesso (ou boletim sem itens elegíveis a processar).
-    /// </summary>
     Sucesso = 0,
-
-    /// <summary>
-    /// Código 1: Ocorrência na Fase 1 quando @@ROWCOUNT = 0 na tabela BOLETIM_PRECO_CAB.
-    /// </summary>
     BoletimNaoExiste = 1,
-
-    /// <summary>
-    /// Código 2: Ocorrência na Fase 1 quando @@ROWCOUNT = 0 na tabela PARAMETRO_PRECO.
-    /// </summary>
     ParametroPrecoNaoCadastrado = 2,
-
-    /// <summary>
-    /// Código 3: [OBSOLETO] Pertencia à antiga procedure sp_CsmCalcPreco9 (inlinada no CROSS APPLY).
-    /// </summary>
     ErroCalculoPreco9 = 3,
-
-    /// <summary>
-    /// Código 4: Ocorrência no bloco CATCH da Fase 4 ao executar o UPDATE na tabela PRODUTO_FILIAL.
-    /// </summary>
     ErroAtualizacaoProdutoFilial = 4,
-
-    // =========================================================================
-    // RETORNOS GERADOS PELAS PROCEDURES SATÉLITE (Fase 5 - Regras Sempre)
-    // Origem real: sp_AtualizaRegrasSempreDemandtec e sp_AtualizaRegrasSempreProfimetrics
-    // A procedure principal recebe via @retornoSempre OUTPUT e repassa para @numRetorno.
-    // =========================================================================
-
-    /// <summary>
-    /// Código 5: Falha no UPDATE da tabela cosmosfl..desc_produto_cab (regra já existente).
-    /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec / sp_AtualizaRegrasSempreProfimetrics.
-    /// </summary>
     ErroUpdateCabecalhoRegrasSempre = 5,
-
-    /// <summary>
-    /// Código 6: Falha no INSERT da tabela cosmosfl..desc_produto_cab (criação de nova regra).
-    /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec / sp_AtualizaRegrasSempreProfimetrics.
-    /// </summary>
     ErroInclusaoCabecalhoRegrasSempre = 6,
-
-    /// <summary>
-    /// Código 7: Falha no INSERT da tabela cosmosfl..desc_produto_det (associação produto-regra).
-    /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec / sp_AtualizaRegrasSempreProfimetrics.
-    /// </summary>
     ErroInclusaoDetalheRegrasSempre = 7,
-
-    /// <summary>
-    /// Código 8: Falha no INSERT da tabela cosmosfl..desc_produto_cli (ou DELETE de detalhe no fluxo 'ED').
-    /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec / sp_AtualizaRegrasSempreProfimetrics.
-    /// </summary>
     ErroInclusaoClientesOuDeleteDetalheRegrasSempre = 8,
-
-    /// <summary>
-    /// Código 9: Falha no INSERT da tabela cosmosfl..desc_produto_flz (ou DELETE de cabeçalho no fluxo 'ED').
-    /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec / sp_AtualizaRegrasSempreProfimetrics.
-    /// </summary>
     ErroInclusaoFinalizadoresOuDeleteCabecalhoRegrasSempre = 9,
-
-    /// <summary>
-    /// Código 10: Falha no INSERT da tabela cosmosfl..DESC_CATEG_CLIENTE (ou DELETE de finalizadores no fluxo 'ED').
-    /// Procedimento de origem: sp_AtualizaRegrasSempreDemandtec.
-    /// </summary>
     ErroCategoriasOuDeleteFinalizadoresRegrasSempre = 10,
 
     ItensNaoEncontrados

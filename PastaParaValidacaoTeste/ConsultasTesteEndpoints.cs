@@ -1,8 +1,6 @@
-using PrecificacaoPoc.Domain.ApenasTestes;
 using PrecificacaoPoc.Interfaces;
-using PrecificacaoPoc.Interfaces.ApenasTestes;
 
-namespace PrecificacaoPoc.Endpoints.ApenasTestes;
+namespace PrecificacaoPoc.ValidacaoTeste;
 
 /// <summary>
 /// APENAS TESTES / COMPARAÇÃO - NÃO FAZ PARTE DA sp_CsmPrecoAtlzBoletim.

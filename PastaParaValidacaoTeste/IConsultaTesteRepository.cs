@@ -1,7 +1,6 @@
 using System.Data;
-using PrecificacaoPoc.Domain.ApenasTestes;
 
-namespace PrecificacaoPoc.Interfaces.ApenasTestes;
+namespace PrecificacaoPoc.ValidacaoTeste;
 
 // APENAS TESTES / COMPARAÇÃO - NÃO FAZ PARTE DA sp_CsmPrecoAtlzBoletim.
 public interface IConsultaTesteRepository

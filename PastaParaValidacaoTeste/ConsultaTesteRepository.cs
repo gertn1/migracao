@@ -1,9 +1,7 @@
 using System.Data;
 using Dapper;
-using PrecificacaoPoc.Domain.ApenasTestes;
-using PrecificacaoPoc.Interfaces.ApenasTestes;
 
-namespace PrecificacaoPoc.Infrastructure.ApenasTestes;
+namespace PrecificacaoPoc.ValidacaoTeste;
 
 /// <summary>
 /// APENAS TESTES / COMPARAÇÃO - NÃO FAZ PARTE DA sp_CsmPrecoAtlzBoletim.

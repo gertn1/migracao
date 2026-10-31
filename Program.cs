@@ -1,11 +1,8 @@
 using PrecificacaoPoc.Endpoints;
-using PrecificacaoPoc.Endpoints.ApenasTestes;
-using PrecificacaoPoc.Helpers;
 using PrecificacaoPoc.Infrastructure;
-using PrecificacaoPoc.Infrastructure.ApenasTestes;
 using PrecificacaoPoc.Interfaces;
-using PrecificacaoPoc.Interfaces.ApenasTestes;
 using PrecificacaoPoc.Services;
+using PrecificacaoPoc.ValidacaoTeste;
 
 var builder = WebApplication.CreateBuilder(args);
 
