@@ -20,7 +20,10 @@ public class BoletimPrecoService(
 {
     public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, PriceBulletinCab cab, List<PriceBulletinDet> det, int usuarioId)
     {
-        PriceBulletinRegras.ValidarSemProdutoRepetido(det);
+
+        //conferir se pode remover produtos repetidos, pois a procedure original não faz isso,
+        // mas a PRIMARY KEY da #BoletimCalc falha se houver repetidos.
+        det = PriceBulletinRegras.RemoverProdutosRepetidos(det).ToList();
 
         var resultado = new ResultadoProcessamento { FILI_CD_FILIAL = filialId };
         using var conn = connectionFactory.Criar();
@@ -66,7 +69,6 @@ public class BoletimPrecoService(
         foreach (var item in itens)
         {
             var atual = produtoPorId[item.ProductId];
-            // Mapear devolve null quando nada vale para o item (sem venda, sem promoção, sem Farmácia Popular / acordo)
             var atualizacao = ProdutoFilialAtualizacaoMapper.Mapear(cab, item, atual, tipoCusto, filialId, agora, arredondar);
 
             if (atualizacao is not null)
