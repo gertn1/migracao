@@ -64,7 +64,6 @@ public class BoletimPrecoService(
         Func<decimal, decimal> arredondar = preco => arredondador.Arredondar(preco, filialId);
 
         var lote = new List<ProdutoFilialAtualizacao>();
-        var comparativo = new List<ItemComparativo>();
 
         foreach (var item in itens)
         {
@@ -73,8 +72,6 @@ public class BoletimPrecoService(
 
             if (atualizacao is not null)
                 lote.Add(atualizacao);
-
-            comparativo.Add(ParaComparativo(item, atual, atualizacao));
         }
 
         using var tx = conn.BeginTransaction();
@@ -101,8 +98,6 @@ public class BoletimPrecoService(
             resultado.Observacoes.Add($"Erro na atualização do produto_filial: {ex.Message}");
             return RetornoProcessamento.ErroAtualizacaoProdutoFilial;
         }
-
-        resultado.Itens = comparativo;
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Demandtec/Profimetrics), fora da transação principal
         await ExecutarRegrasSempreAsync(conn, cab, filialId, itens, resultado);
@@ -151,22 +146,6 @@ public class BoletimPrecoService(
             resultado.Observacoes.Add($"Regras Profimetrics executadas para {elegiveis.Count} item(ns).");
         }
     }
-
-    // Valores FINAIS na filial: o que o UPDATE grava e, quando o item nem foi atualizado, o valor atual
-    private static ItemComparativo ParaComparativo(PriceBulletinDet item, ProdutoFilial atual, ProdutoFilialAtualizacao? u) => new()
-    {
-        PRME_CD_PRODUTO_BOPD_CD_PRODUTO_productId = item.ProductId,
-        PRFI_VL_PRECOVENDA_BOPD_VL_PRCVENDA_salePrice = item.PrecoVenda(),
-        PRFI_VL_PRCPROM_BOPD_VL_PRCPROM_promotionalPrice = item.PrecoPromocional(),
-        PRME_CD_PRODUTO = item.ProductId,
-        PRFI_VL_PRECOVENDA = u is null ? atual.PRFI_VL_PRECOVENDA : u.PrecoVenda,
-        PRFI_VL_PRECO9_ANTERIOR = atual.PRFI_VL_PRECO9,
-        PRFI_VL_PRECO9 = u is null ? atual.PRFI_VL_PRECO9 : u.Preco9,
-        PRFI_PR_MBEPRCVEN = u is null ? atual.PRFI_PR_MBEPRCVEN : u.MbePrcVen,
-        PRFI_PR_MBEPRECO9 = u is null ? atual.PRFI_PR_MBEPRECO9 : u.MbePreco9,
-        PRFI_VL_PRCPROM = u is null ? atual.PRFI_VL_PRCPROM : u.PrcProm,
-        Atualizado = u is not null
-    };
 
     private static void Finalizar(ResultadoProcessamento r, RetornoProcessamento ret)
     {
