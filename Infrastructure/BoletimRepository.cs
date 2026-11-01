@@ -18,8 +18,8 @@ public class BoletimRepository : IBoletimRepository
     public async Task<char?> ObterTipoCustoAsync(IDbConnection c, IDbTransaction? tx)
     {
         const string sql = "SELECT TOP 1 PAPR_TP_CUSTOPV FROM PARAMETRO_PRECO WITH (NOLOCK)";
-        var valor = await c.QueryFirstOrDefaultAsync<string?>(sql, transaction: tx);
-        return string.IsNullOrEmpty(valor) ? null : valor[0];
+        var valor = await c.QueryFirstOrDefaultAsync<string>(sql, transaction: tx);
+        return valor?.FirstOrDefault();
     }
 
     // Estado de PRODUTO_FILIAL/PRODUTO_MESTRE dos produtos do boletim (os preços do boletim vêm do objeto em memória, não do banco).
@@ -38,7 +38,6 @@ public class BoletimRepository : IBoletimRepository
     private static async Task<IEnumerable<ProdutoFilial>> ObterProdutosFilialLoteAsync(
         IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, int[] ids)
     {
-
         const string sql = @"
             SELECT pf.PRME_CD_PRODUTO,
                    pm.PRME_FL_MONITORADO,
@@ -90,32 +89,32 @@ public class BoletimRepository : IBoletimRepository
     {
         const string sql = @"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRECOVENDA = @PrecoVenda,
-                PRFI_VL_PRECO1 = @Preco1,
-                PRFI_VL_PRECO2 = @Preco2,
-                PRFI_VL_PRECO3 = @Preco3,
-                PRFI_VL_PRECO6 = @Preco6,
-                PRFI_VL_PRECO9 = @Preco9,
-                PRFI_PR_MBEPRCVEN = @MbePrcVen,
-                PRFI_PR_MBEPRECO9 = @MbePreco9,
-                MARGEM_VENDA_PRECIFICACAO = @MargemVendaPrecificacao,
-                PRFI_PR_MARGANTPMC = @MargAntPmc,
-                PRFI_PR_MARGCALPMC = @MargCalPmc,
-                PRFI_VL_PRCPROM = @PrcProm,
-                PRFI_DT_INIPRCPROM = @DtIniPrcProm,
-                PRFI_DT_FIMPRCPROM = @DtFimPrcProm,
-                MARGEM_PROMOCAO_PRECIFICACAO = @MargemPromocaoPrecificacao,
-                PRECO_VENDA_ECOMMERCE = @PrecoVendaEcommerce,
-                PRECO_PROMOCAO_ECOMMERCE = @PrecoPromocaoEcommerce,
-                DATA_INICIO_PROMOCAO_ECOMMERCE = @DataInicioPromoEcommerce,
-                DATA_FIM_PROMOCAO_ECOMMERCE = @DataFimPromoEcommerce,
-                MARGEM_VENDA_MAXIMO_ECOMMERCE = @MargemVendaMaximoEcommerce,
-                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE = @DataAtualizacaoBoletimEcommerce,
+                PRFI_VL_PRECOVENDA =                   @PrecoVenda,
+                PRFI_VL_PRECO1 =                       @Preco1,
+                PRFI_VL_PRECO2 =                       @Preco2, 
+                PRFI_VL_PRECO3 =                       @Preco3,     
+                PRFI_VL_PRECO6 =                       @Preco6,
+                PRFI_VL_PRECO9 =                       @Preco9,
+                PRFI_PR_MBEPRCVEN =                    @MbePrcVen,
+                PRFI_PR_MBEPRECO9 =                    @MbePreco9,
+                MARGEM_VENDA_PRECIFICACAO =            @MargemVendaPrecificacao,
+                PRFI_PR_MARGANTPMC =                   @MargAntPmc,
+                PRFI_PR_MARGCALPMC =                   @MargCalPmc,
+                PRFI_VL_PRCPROM =                      @PrcProm,
+                PRFI_DT_INIPRCPROM =                   @DtIniPrcProm,
+                PRFI_DT_FIMPRCPROM =                   @DtFimPrcProm,
+                MARGEM_PROMOCAO_PRECIFICACAO =         @MargemPromocaoPrecificacao,
+                PRECO_VENDA_ECOMMERCE =                @PrecoVendaEcommerce,
+                PRECO_PROMOCAO_ECOMMERCE =             @PrecoPromocaoEcommerce,
+                DATA_INICIO_PROMOCAO_ECOMMERCE =       @DataInicioPromoEcommerce,
+                DATA_FIM_PROMOCAO_ECOMMERCE =          @DataFimPromoEcommerce,
+                MARGEM_VENDA_MAXIMO_ECOMMERCE =        @MargemVendaMaximoEcommerce,
+                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE =   @DataAtualizacaoBoletimEcommerce,
                 DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = @DataAlteracaoPrecoVendaEcommerce,
-                ENCARTE_CLIENTE_SEMPRE = @EncarteClienteSempre,
-                PRFI_DT_ULTAPRCVEN = @DataUltimaAtualizacao,
-                PRFI_DH_ULTATUBOLE = @DataUltimaAtualizacaoBoletim
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
+                ENCARTE_CLIENTE_SEMPRE =               @EncarteClienteSempre,
+                PRFI_DT_ULTAPRCVEN =                   @DataUltimaAtualizacao,
+                PRFI_DH_ULTATUBOLE =                   @DataUltimaAtualizacaoBoletim
+            WHERE FILI_CD_FILIAL =                     @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
 
         var itens = lote.AsList();
         return itens.Count == 0 ? 0 : await c.ExecuteAsync(sql, itens, tx);
