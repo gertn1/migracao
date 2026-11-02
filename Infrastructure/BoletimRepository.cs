@@ -23,6 +23,7 @@ public class BoletimRepository : IBoletimRepository
     }
 
     // Estado de PRODUTO_FILIAL/PRODUTO_MESTRE dos produtos do boletim (os preços do boletim vêm do objeto em memória, não do banco).
+    // Lê SÓ as colunas que entram no cálculo de algum valor novo; as demais o UPDATE mantém sozinho (COALESCE).
     // Só volta quem existe nas duas tabelas e não está em FUTURO_PRECO_DUPLICADO: é o INNER JOIN / NOT EXISTS da procedure.
     // Mantém o filtro NOT EXISTS (FUTURO_PRECO_DUPLICADO) da carga original.
     public async Task<List<ProdutoFilial>> ObterProdutosFilialAsync(IDbConnection c, IDbTransaction? tx, int filialId, int boletimId, IEnumerable<int> produtoIds)
@@ -44,30 +45,7 @@ public class BoletimRepository : IBoletimRepository
                    pf.PRFI_VL_UCG,
                    pf.PRFI_VL_CMPG,
                    pf.PRFI_VL_PRCMAXCONS,
-                   pf.PRFI_VL_PRECOVENDA,
-                   pf.PRFI_VL_PRECO1,
-                   pf.PRFI_VL_PRECO2,
-                   pf.PRFI_VL_PRECO3,
-                   pf.PRFI_VL_PRECO6,
-                   pf.PRFI_VL_PRECO9,
-                   pf.PRFI_PR_MBEPRCVEN,
-                   pf.PRFI_PR_MBEPRECO9,
-                   pf.MARGEM_VENDA_PRECIFICACAO,
-                   pf.PRFI_PR_MARGANTPMC,
-                   pf.PRFI_PR_MARGCALPMC,
-                   pf.PRFI_VL_PRCPROM,
-                   pf.PRFI_DT_INIPRCPROM,
-                   pf.PRFI_DT_FIMPRCPROM,
-                   pf.MARGEM_PROMOCAO_PRECIFICACAO,
-                   pf.ENCARTE_CLIENTE_SEMPRE,
-                   pf.PRECO_VENDA_ECOMMERCE,
-                   pf.PRECO_PROMOCAO_ECOMMERCE,
-                   pf.DATA_INICIO_PROMOCAO_ECOMMERCE,
-                   pf.DATA_FIM_PROMOCAO_ECOMMERCE,
-                   pf.MARGEM_VENDA_MAXIMO_ECOMMERCE,
-                   pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE,
-                   pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE,
-                   pf.PRFI_DH_ULTATUBOLE
+                   pf.PRFI_VL_PRECO9
             FROM PRODUTO_FILIAL pf WITH (NOLOCK)
             INNER JOIN PRODUTO_MESTRE pm WITH (NOLOCK)
                 ON pm.PRME_CD_PRODUTO = pf.PRME_CD_PRODUTO
@@ -82,39 +60,43 @@ public class BoletimRepository : IBoletimRepository
         return await c.QueryAsync<ProdutoFilial>(sql, new { filialId, boletimId, ids }, tx);
     }
 
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4]: o ÚNICO UPDATE de PRODUTO_FILIAL (fases 4.1 a 4.4 juntas). Cada item do lote já traz o valor final
-    // de todas as colunas (as regras foram aplicadas por ProdutoFilialAtualizacao.Mapear), então o UPDATE só grava, sem condição nenhuma.
+    // [MIGRAÇÃO DA PROCEDURE - FASE 4]: o ÚNICO UPDATE de PRODUTO_FILIAL (fases 4.1 a 4.4 juntas). Cada item do lote traz o valor novo
+    // de cada coluna, ou NULL para manter o atual: COALESCE(@novo, coluna) substitui o "ELSE pf.coluna" da procedure, então as colunas
+    // mantidas não precisam ser lidas antes. PRECO1 e PRECO2 são as únicas que podem ser limpas de propósito (@LimparPreco1/2).
+    // As margens PMC (ANT e margem máxima do e-commerce) dependem do CAL atual: o lado direito de um SET enxerga o valor ANTERIOR da
+    // linha, então o UPDATE usa PRFI_PR_MARGCALPMC direto, sem precisar lê-lo antes.
     // Roda na mesma transação do service.
     public async Task<int> AtualizarProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<ProdutoFilialAtualizacao> lote)
     {
         const string sql = @"
             UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRECOVENDA =                   @PrecoVenda,
-                PRFI_VL_PRECO1 =                       @Preco1,
-                PRFI_VL_PRECO2 =                       @Preco2, 
-                PRFI_VL_PRECO3 =                       @Preco3,     
-                PRFI_VL_PRECO6 =                       @Preco6,
-                PRFI_VL_PRECO9 =                       @Preco9,
-                PRFI_PR_MBEPRCVEN =                    @MbePrcVen,
-                PRFI_PR_MBEPRECO9 =                    @MbePreco9,
-                MARGEM_VENDA_PRECIFICACAO =            @MargemVendaPrecificacao,
-                PRFI_PR_MARGANTPMC =                   @MargAntPmc,
-                PRFI_PR_MARGCALPMC =                   @MargCalPmc,
-                PRFI_VL_PRCPROM =                      @PrcProm,
-                PRFI_DT_INIPRCPROM =                   @DtIniPrcProm,
-                PRFI_DT_FIMPRCPROM =                   @DtFimPrcProm,
-                MARGEM_PROMOCAO_PRECIFICACAO =         @MargemPromocaoPrecificacao,
-                PRECO_VENDA_ECOMMERCE =                @PrecoVendaEcommerce,
-                PRECO_PROMOCAO_ECOMMERCE =             @PrecoPromocaoEcommerce,
-                DATA_INICIO_PROMOCAO_ECOMMERCE =       @DataInicioPromoEcommerce,
-                DATA_FIM_PROMOCAO_ECOMMERCE =          @DataFimPromoEcommerce,
-                MARGEM_VENDA_MAXIMO_ECOMMERCE =        @MargemVendaMaximoEcommerce,
-                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE =   @DataAtualizacaoBoletimEcommerce,
-                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = @DataAlteracaoPrecoVendaEcommerce,
-                ENCARTE_CLIENTE_SEMPRE =               @EncarteClienteSempre,
-                PRFI_DT_ULTAPRCVEN =                   @DataUltimaAtualizacao,
-                PRFI_DH_ULTATUBOLE =                   @DataUltimaAtualizacaoBoletim
-            WHERE FILI_CD_FILIAL =                     @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
+                PRFI_VL_PRECOVENDA =                   COALESCE(@PrecoVenda, PRFI_VL_PRECOVENDA),
+                PRFI_VL_PRECO1 =                       CASE WHEN @LimparPreco1 = 1 THEN NULL ELSE COALESCE(@Preco1, PRFI_VL_PRECO1) END,
+                PRFI_VL_PRECO2 =                       CASE WHEN @LimparPreco2 = 1 THEN NULL ELSE COALESCE(@Preco2, PRFI_VL_PRECO2) END,
+                PRFI_VL_PRECO3 =                       COALESCE(@Preco3, PRFI_VL_PRECO3),
+                PRFI_VL_PRECO6 =                       COALESCE(@Preco6, PRFI_VL_PRECO6),
+                PRFI_VL_PRECO9 =                       COALESCE(@Preco9, PRFI_VL_PRECO9),
+                PRFI_PR_MBEPRCVEN =                    COALESCE(@MbePrcVen, PRFI_PR_MBEPRCVEN),
+                PRFI_PR_MBEPRECO9 =                    COALESCE(@MbePreco9, PRFI_PR_MBEPRECO9),
+                MARGEM_VENDA_PRECIFICACAO =            COALESCE(@MargemVendaPrecificacao, MARGEM_VENDA_PRECIFICACAO),
+                PRFI_PR_MARGANTPMC =                   CASE WHEN @TrocarMargemPmc = 1 THEN COALESCE(PRFI_PR_MARGCALPMC, PRFI_PR_MARGANTPMC) ELSE PRFI_PR_MARGANTPMC END,
+                PRFI_PR_MARGCALPMC =                   COALESCE(@MargCalPmc, PRFI_PR_MARGCALPMC),
+                PRFI_VL_PRCPROM =                      COALESCE(@PrcProm, PRFI_VL_PRCPROM),
+                PRFI_DT_INIPRCPROM =                   COALESCE(@DtIniPrcProm, PRFI_DT_INIPRCPROM),
+                PRFI_DT_FIMPRCPROM =                   COALESCE(@DtFimPrcProm, PRFI_DT_FIMPRCPROM),
+                MARGEM_PROMOCAO_PRECIFICACAO =         COALESCE(@MargemPromocaoPrecificacao, MARGEM_PROMOCAO_PRECIFICACAO),
+                PRECO_VENDA_ECOMMERCE =                COALESCE(@PrecoVendaEcommerce, PRECO_VENDA_ECOMMERCE),
+                PRECO_PROMOCAO_ECOMMERCE =             COALESCE(@PrecoPromocaoEcommerce, PRECO_PROMOCAO_ECOMMERCE),
+                DATA_INICIO_PROMOCAO_ECOMMERCE =       COALESCE(@DataInicioPromoEcommerce, DATA_INICIO_PROMOCAO_ECOMMERCE),
+                DATA_FIM_PROMOCAO_ECOMMERCE =          COALESCE(@DataFimPromoEcommerce, DATA_FIM_PROMOCAO_ECOMMERCE),
+                MARGEM_VENDA_MAXIMO_ECOMMERCE =        CASE WHEN @AtualizarMargemMaximaEcommerce = 1 
+                    THEN COALESCE(@MargemVendaMaximoEcommerce, PRFI_PR_MARGCALPMC, MARGEM_VENDA_MAXIMO_ECOMMERCE) ELSE MARGEM_VENDA_MAXIMO_ECOMMERCE END,
+                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE =   COALESCE(@DataAtualizacaoBoletimEcommerce, DATA_ATUALIZACAO_BOLETIM_ECOMMERCE),
+                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = COALESCE(@DataAlteracaoPrecoVendaEcommerce, DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE),
+                ENCARTE_CLIENTE_SEMPRE =               COALESCE(@EncarteClienteSempre, ENCARTE_CLIENTE_SEMPRE),
+                PRFI_DH_ULTATUBOLE =                   COALESCE(@DataUltimaAtualizacaoBoletim, PRFI_DH_ULTATUBOLE),
+                PRFI_DT_ULTAPRCVEN =                   @DataUltimaAtualizacao
+            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
 
         var itens = lote.AsList();
         return itens.Count == 0 ? 0 : await c.ExecuteAsync(sql, itens, tx);
