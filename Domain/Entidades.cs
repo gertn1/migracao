@@ -30,40 +30,18 @@ public enum TipoCusto
     MaiorEntreOsDois = 'M'  // maior entre UCG e CMPG
 }
 
-// PRODUTO_FILIAL (+ PRME_FL_MONITORADO de PRODUTO_MESTRE) como está no banco antes do boletim: o que o cálculo precisa (custo, PMC, Preço 9)
-// e os valores ATUAIS das colunas que o boletim pode alterar. Esses valores entram no ProdutoFilialAtualizacao quando a regra da
-// procedure manda manter a coluna (o "ELSE pf.coluna" e o COALESCE(novo, atual)), para o UPDATE gravar sempre o valor final.
+// PRODUTO_FILIAL (+ PRME_FL_MONITORADO de PRODUTO_MESTRE) como está no banco antes do boletim: SÓ as colunas que entram no cálculo
+// de algum valor novo (custo, PMC, Preço 9, troca da margem PMC). As colunas que o boletim apenas mantém não são lidas:
+// o UPDATE mantém o valor delas sozinho (CASE WHEN @Alterar... = 1 THEN novo ELSE coluna END).
 public class ProdutoFilial
 {
     public int PRME_CD_PRODUTO { get; set; }
     // PRODUTO_MESTRE: 'S' = monitorado, 'N' = não monitorado; qualquer outro valor/NULL cai no ELSE da procedure (mantém o Preço 9 atual)
     public string? PRME_FL_MONITORADO { get; set; }
-    public decimal? PRFI_VL_UCG { get; set; }
-    public decimal? PRFI_VL_CMPG { get; set; }
-    public decimal? PRFI_VL_PRCMAXCONS { get; set; }
-
-    public decimal? PRFI_VL_PRECOVENDA { get; set; }
-    public decimal? PRFI_VL_PRECO1 { get; set; }
-    public decimal? PRFI_VL_PRECO2 { get; set; }
-    public decimal? PRFI_VL_PRECO3 { get; set; }
-    public decimal? PRFI_VL_PRECO6 { get; set; }
-    public decimal? PRFI_VL_PRECO9 { get; set; }
-    public decimal? PRFI_PR_MBEPRCVEN { get; set; }
-    public decimal? PRFI_PR_MBEPRECO9 { get; set; }
-    public decimal? MARGEM_VENDA_PRECIFICACAO { get; set; }
-    public decimal? PRFI_PR_MARGANTPMC { get; set; }
-    public decimal? PRFI_PR_MARGCALPMC { get; set; }
-    public decimal? PRFI_VL_PRCPROM { get; set; }
-    public DateTime? PRFI_DT_INIPRCPROM { get; set; }
-    public DateTime? PRFI_DT_FIMPRCPROM { get; set; }
-    public decimal? MARGEM_PROMOCAO_PRECIFICACAO { get; set; }
-    public string? ENCARTE_CLIENTE_SEMPRE { get; set; }
-    public decimal? PRECO_VENDA_ECOMMERCE { get; set; }
-    public decimal? PRECO_PROMOCAO_ECOMMERCE { get; set; }
-    public DateTime? DATA_INICIO_PROMOCAO_ECOMMERCE { get; set; }
-    public DateTime? DATA_FIM_PROMOCAO_ECOMMERCE { get; set; }
-    public decimal? MARGEM_VENDA_MAXIMO_ECOMMERCE { get; set; }
-    public DateTime? DATA_ATUALIZACAO_BOLETIM_ECOMMERCE { get; set; }
-    public DateTime? DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE { get; set; }
-    public DateTime? PRFI_DH_ULTATUBOLE { get; set; }
+    public decimal? PRFI_VL_UCG { get; set; }           // custo (ResolverCusto)
+    public decimal? PRFI_VL_CMPG { get; set; }          // custo (ResolverCusto)
+    public decimal? PRFI_VL_PRCMAXCONS { get; set; }    // PMC (CalcularPreco9)
+    public decimal? PRFI_VL_PRECO9 { get; set; }        // Preço 9 atual (CalcularPreco9 compara com o PMC)
+    public decimal? PRFI_PR_MARGCALPMC { get; set; }    // vira o novo ANT na troca da margem PMC; base de MARGEM_VENDA_MAXIMO_ECOMMERCE
+    public decimal? PRFI_PR_MARGANTPMC { get; set; }    // novo ANT quando o CAL atual é NULL
 }
