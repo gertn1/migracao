@@ -6,11 +6,6 @@ using static PrecificacaoPoc.Helpers.PrecoCalculos;
 
 namespace PrecificacaoPoc.Mapeamento;
 
-/// <summary>
-/// Mapeia boletim (cab + det) + produto na filial para o ProdutoFilialAtualizacao (Fase 4 da procedure, 4.1 a 4.4).
-/// Cada coluna sai com o valor novo, ou NULL para manter o valor atual (o UPDATE faz COALESCE(@novo, coluna)).
-/// Só monta o objeto: as condições estão em CondicoesProcedure e os cálculos em PrecoCalculos.
-/// </summary>
 public static class ProdutoFilialAtualizacaoMapper
 {
     /// <summary>
@@ -101,8 +96,14 @@ public static class ProdutoFilialAtualizacaoMapper
     // 4.3 Farmácia Popular - alteração: só troca se o boletim trouxe o preço (COALESCE(novo, atual))
     private static void AplicarFarmaciaAlteracao(ProdutoFilialAtualizacao u, PriceBulletinDet det)
     {
-        if (det.PrecoFarmaciaPopularTotal() is { } preco1) GravarPreco1(u, preco1);
-        if (det.PrecoFarmaciaPopularParcial() is { } preco2) GravarPreco2(u, preco2);
+        var preco1 = det.PrecoFarmaciaPopularTotal();
+        var preco2 = det.PrecoFarmaciaPopularParcial();
+
+        if (preco1.HasValue)
+            GravarPreco1(u, preco1);
+
+        if (preco2.HasValue)
+            GravarPreco2(u, preco2);
     }
 
     // 4.4 Produtos acordo: promoção e datas só trocam se vieram; PRECO1 só para quem o boletim trouxe, e NULLIF(x, 0) limpa o preço

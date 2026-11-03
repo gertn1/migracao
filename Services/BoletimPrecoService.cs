@@ -7,20 +7,11 @@ using System.Data;
 
 namespace PrecificacaoPoc.Services;
 
-/// <summary>
-/// Orquestrador: recebe cab, det e filial, lê o produto na filial, entrega tudo ao ProdutoFilialAtualizacaoMapper (regras e cálculos)
-/// e manda o resultado ao repositório gravar.
-/// </summary>
-public class BoletimPrecoService(
-    IDbConnectionFactory connectionFactory,
-    IBoletimRepository repo,
-    IRegrasSempreGateway regrasSempre,
-    IArredondadorPrecoVenda arredondador,
-    ILogger<BoletimPrecoService> log)
+public class BoletimPrecoService(IDbConnectionFactory connectionFactory, IBoletimRepository repo,
+    IRegrasSempreGateway regrasSempre, IArredondadorPrecoVenda arredondador, ILogger<BoletimPrecoService> log)
 {
     public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, PriceBulletinCab cab, List<PriceBulletinDet> det, int usuarioId)
     {
-
         //conferir se pode remover produtos repetidos, pois a procedure original não faz isso,
         // mas a PRIMARY KEY da #BoletimCalc falha se houver repetidos.
         det = PriceBulletinRegras.RemoverProdutosRepetidos(det).ToList();
@@ -30,7 +21,7 @@ public class BoletimPrecoService(
         conn.Open();
 
         var retorno = await ExecutarFluxoAsync(conn, filialId, cab, det, usuarioId, resultado);
-        Finalizar(resultado, retorno);
+        ResultadoProcessamentoHelper.Finalizar(resultado, retorno);
         return resultado;
     }
 
@@ -82,7 +73,7 @@ public class BoletimPrecoService(
 
             // Tabela PRODUTO_FARMACIA_POPULAR (o PRODUTO_FILIAL de Farmácia Popular já saiu no UPDATE acima)
             var processo = cab.ProcessoGerador();
-            if (processo == ProcessosBoletim.FarmaciaExclusao) 
+            if (processo == ProcessosBoletim.FarmaciaExclusao)
                 await repo.ExcluirFarmaciaPopularAsync(conn, tx, itens.Select(i => i.ProductId));
             else if (processo == ProcessosBoletim.FarmaciaAlteracao)
                 await repo.LimparOperacaoFarmaciaPopularAsync(conn, tx, itens.Select(i => i.ProductId));
@@ -99,7 +90,7 @@ public class BoletimPrecoService(
             return RetornoProcessamento.ErroAtualizacaoProdutoFilial;
         }
 
-        // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Demandtec/Profimetrics), fora da transação principal
+        // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Profimetrics), fora da transação principal
         await ExecutarRegrasSempreAsync(conn, cab, filialId, itens, resultado);
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 6]: Retorno final sempre 0 (SET @numRetorno = 0), como na procedure
@@ -109,29 +100,12 @@ public class BoletimPrecoService(
     private async Task ExecutarRegrasSempreAsync(
         IDbConnection conn, PriceBulletinCab cab, int filialId, List<PriceBulletinDet> itens, ResultadoProcessamento resultado)
     {
-        // Filtro dos dois cursores (idêntico nos dois): WHERE ISNULL(PRECO_MAXIMO_CONSUMIDOR,0) > 0 AND ISNULL(BOPD_VL_PRCVENDA3,0) > 0
+        // Filtro do cursor:WHERE ISNULL(PRECO_MAXIMO_CONSUMIDOR,0) > 0 AND ISNULL(BOPD_VL_PRCVENDA3,0) > 0
         var elegiveis = itens
             .Where(i => i.PrecoMaximo() is > 0 && i.PrecoSempre() is > 0)
             .ToList();
 
-        // [FASE 5.1] IF @regBOLETIM_DEMANDTEC = 'S' -> a flag é verificada UMA vez; se verdadeira, percorre todos os itens elegíveis.
-        if (cab.Demandtec())
-        {
-            foreach (var item in elegiveis)
-            {
-                // SET @auxPreco3 = DBO.fn_ARREDONDA_PRECO_VENDA_MONITORADO(@auxPreco3, @COD_FILIAL)
-                decimal preco3 = arredondador.Arredondar(item.PrecoSempre()!.Value, filialId);
-
-                // EXEC sp_AtualizaRegrasSempreDemandtec @auxProduto, @COD_FILIAL, @auxPMC, @auxPreco3, @retornoSempre OUTPUT
-                int retorno = await regrasSempre.AtualizarRegraDemandtecAsync(
-                    conn, null, item.ProductId, filialId, item.PrecoMaximo()!.Value, preco3);
-
-                if (retorno != 0) resultado.Observacoes.Add($"Demandtec produto {item.ProductId}: retorno {retorno}");
-            }
-            resultado.Observacoes.Add($"Regras Demandtec executadas para {elegiveis.Count} item(ns).");
-        }
-
-        // [FASE 5.2] IF @regBOLETIM_PROFIMETRICS = 'S' -> só começa depois que TODO o Demandtec terminou, como na procedure.
+        // [FASE 5.2] IF @regBOLETIM_PROFIMETRICS = 'S'
         if (cab.Profimetrics())
         {
             foreach (var item in elegiveis)
@@ -145,25 +119,5 @@ public class BoletimPrecoService(
             }
             resultado.Observacoes.Add($"Regras Profimetrics executadas para {elegiveis.Count} item(ns).");
         }
-    }
-
-    private static void Finalizar(ResultadoProcessamento r, RetornoProcessamento ret)
-    {
-        r.StatusRetorno = (int)ret;
-        r.Descricao = ret switch
-        {
-            RetornoProcessamento.Sucesso => "Sucesso",
-            RetornoProcessamento.BoletimNaoExiste => "Boletim não existe",
-            RetornoProcessamento.ParametroPrecoNaoCadastrado => "Parâmetro de preço não cadastrado",
-            RetornoProcessamento.ErroCalculoPreco9 => "Erro no cálculo de preços (Preço 9)",
-            RetornoProcessamento.ErroAtualizacaoProdutoFilial => "Erro na atualização do produto_filial",
-            RetornoProcessamento.ErroUpdateCabecalhoRegrasSempre => "Erro no update do cabeçalho desc_produto_cab (regras sempre)",
-            RetornoProcessamento.ErroInclusaoCabecalhoRegrasSempre => "Erro na inclusão do cabeçalho desc_produto_cab (regras sempre)",
-            RetornoProcessamento.ErroInclusaoDetalheRegrasSempre => "Erro na inclusão do detalhe desc_produto_det (regras sempre)",
-            RetornoProcessamento.ErroInclusaoClientesOuDeleteDetalheRegrasSempre => "Erro na inclusão de clientes ou delete do detalhe desc_produto_det (regras sempre)",
-            RetornoProcessamento.ErroInclusaoFinalizadoresOuDeleteCabecalhoRegrasSempre => "Erro na inclusão de finalizadores ou delete do cabeçalho desc_produto_cab (regras sempre)",
-            RetornoProcessamento.ErroCategoriasOuDeleteFinalizadoresRegrasSempre => "Erro em categorias ou delete de finalizadores (regras sempre)",
-            _ => $"Retorno desconhecido ({(int)ret})"
-        };
     }
 }
