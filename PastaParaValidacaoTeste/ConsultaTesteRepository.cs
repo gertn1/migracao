@@ -81,6 +81,7 @@ public class ConsultaTesteRepository : IConsultaTesteRepository
                             WHERE fp.BOPC_SQ_BOLETIM = d.BOPC_SQ_BOLETIM
                               AND fp.StoreId = @filialId
                               AND fp.ProductId = d.BOPD_CD_PRODUTO) THEN 1 ELSE 0 END AS [duplicado],
+                   c.BOPC_NM_PROCESSGER AS [c.BOPC_NM_PROCESSGER_processName],
                    d.BOPD_CD_PRODUTO AS [d.BOPD_CD_PRODUTO_productId],
                    pf.PRME_CD_PRODUTO AS [pf.PRME_CD_PRODUTO],
                    pm.PRME_FL_MONITORADO AS [pm.PRME_FL_MONITORADO],
@@ -112,10 +113,15 @@ public class ConsultaTesteRepository : IConsultaTesteRepository
                    d.ENCARTE_CLIENTE_SEMPRE AS [d.ENCARTE_CLIENTE_SEMPRE_alwaysCustomerFlyer],
                    pf.ENCARTE_CLIENTE_SEMPRE AS [pf.ENCARTE_CLIENTE_SEMPRE],
                    c.ATUALIZAR_PRECO_ECOMMERCE AS [c.ATUALIZAR_PRECO_ECOMMERCE_updateEcommercePriceFlag],
+                   d.BOPD_VL_PRCVENDA AS [d.BOPD_VL_PRCVENDA_salePrice_precoVendaEcommerce],
                    pf.PRECO_VENDA_ECOMMERCE AS [pf.PRECO_VENDA_ECOMMERCE],
+                   d.BOPD_VL_PRCPROM AS [d.BOPD_VL_PRCPROM_promotionalPrice_precoPromocaoEcommerce],
                    pf.PRECO_PROMOCAO_ECOMMERCE AS [pf.PRECO_PROMOCAO_ECOMMERCE],
+                   c.BOPC_DT_INIPREPRO AS [c.BOPC_DT_INIPREPRO_startValidity_dataInicioPromoEcommerce],
                    pf.DATA_INICIO_PROMOCAO_ECOMMERCE AS [pf.DATA_INICIO_PROMOCAO_ECOMMERCE],
+                   c.BOPC_DT_FIMPREPRO AS [c.BOPC_DT_FIMPREPRO_endValidity_dataFimPromoEcommerce],
                    pf.DATA_FIM_PROMOCAO_ECOMMERCE AS [pf.DATA_FIM_PROMOCAO_ECOMMERCE],
+                   d.PERCENTUAL_DESCONTO_EMBUTIDO AS [d.PERCENTUAL_DESCONTO_EMBUTIDO_discountPercentage_margemVendaMaximoEcommerce],
                    pf.MARGEM_VENDA_MAXIMO_ECOMMERCE AS [pf.MARGEM_VENDA_MAXIMO_ECOMMERCE],
                    pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE AS [pf.DATA_ATUALIZACAO_BOLETIM_ECOMMERCE],
                    pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE AS [pf.DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE],
