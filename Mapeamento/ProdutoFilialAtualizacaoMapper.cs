@@ -39,8 +39,6 @@ public static class ProdutoFilialAtualizacaoMapper
         return u;
     }
 
-    // ═════════ Fase 4.1: UPDATE gigante (venda / promoção / e-commerce) ═════════
-
     private static void AplicarBoletim(ProdutoFilialAtualizacao u, PriceBulletinCab cab, PriceBulletinDet det, ProdutoFilial atual,
         TipoCusto tipoCusto, DateTime agora, Func<decimal, decimal> arredondarVenda)
     {
@@ -48,45 +46,51 @@ public static class ProdutoFilialAtualizacaoMapper
         bool temPromocao = det.TemPromocao();                // BOPD_VL_PRCPROM > 0
         bool ecommerce = cab.AtualizaPrecoEcommerce();       // ATUALIZAR_PRECO_ECOMMERCE = 1
         var desconto = det.DescontoEmbutido();
-        // Colunas calculadas da #BoletimCalc (só existem quando o boletim trouxe venda > 0)
         var custo = ResolverCusto(tipoCusto, atual.PRFI_VL_UCG, atual.PRFI_VL_CMPG);
         var precoVendaCalc = CalcularPrecoVenda(cab, det, arredondarVenda);
         var preco9Calc = CalcularPreco9(det, atual);
         var mbePrcVen = temVenda ? CalcularMargemMbe(det.PrecoVenda(), custo) : (decimal?)null;
         var margemPreco9 = temVenda ? CalcularMargemPreco9(preco9Calc, custo) : (decimal?)null;
+        var preco6 = det.PrecoAnterior();
 
         // Preço de venda
         u.PrecoVenda = SeVenda(temVenda, precoVendaCalc);
+        u.PreencherNullPrecoVenda = temVenda && precoVendaCalc is null;
         u.Preco3 = SeVenda(temVenda, det.PrecoSempre());
-        u.Preco6 = SeVenda(temVenda, det.PrecoAnterior());
+        u.Preco6 = SeVenda(temVenda, preco6);
+        u.PreencherNullPreco6 = temVenda && preco6 is null;
         u.Preco9 = SeVenda(temVenda, preco9Calc);
+        u.PreencherNullPreco9 = temVenda && preco9Calc is null;
         u.MbePrcVen = SeVenda(temVenda, mbePrcVen);
+        u.PreencherNullMbePrcVen = temVenda && mbePrcVen is null;
         u.MbePreco9 = SeVenda(temVenda, margemPreco9);
+        u.PreencherNullMbePreco9 = temVenda && margemPreco9 is null;
         u.MargemVendaPrecificacao = SeVenda(temVenda, det.MargemVenda());
-        // Desconto embutido (PMC): o CAL atual vira o ANT e o desconto do boletim vira o CAL.
-        // O ANT é trocado no próprio UPDATE (COALESCE(CAL, ANT) lê o valor anterior da linha), por isso aqui só vai a flag.
         u.TrocarMargemPmc = temVenda && desconto is not null;
         u.MargCalPmc = SeTrocaPmc(temVenda, desconto, desconto);
-        // Promoção
         u.PrcProm = SePromocao(temPromocao, det.PrecoPromocional());
         u.DtIniPrcProm = SePromocao(temPromocao, cab.StartValidity);
         u.DtFimPrcProm = SePromocao(temPromocao, cab.EndValidity);
+        u.PreencherNullDtIniPrcProm = temPromocao && cab.StartValidity is null;
+        u.PreencherNullDtFimPrcProm = temPromocao && cab.EndValidity is null;
         u.MargemPromocaoPrecificacao = SePromocao(temPromocao, det.MargemPromocao());
-        u.EncarteClienteSempre = temPromocao ? det.AlwaysCustomerFlyer : null;   // texto: mesma regra do SePromocao
-        // E-commerce
+        u.EncarteClienteSempre = temPromocao ? det.AlwaysCustomerFlyer : null;
         u.PrecoVendaEcommerce = SeEcommerceVenda(ecommerce, temVenda, precoVendaCalc);
+        u.PreencherNullPrecoVendaEcommerce = ecommerce && temVenda && precoVendaCalc is null;
         u.PrecoPromocaoEcommerce = SeEcommercePromocao(ecommerce, temPromocao, det.PrecoPromocional());
         u.DataInicioPromoEcommerce = SeEcommercePromocao(ecommerce, temPromocao, cab.StartValidity);
         u.DataFimPromoEcommerce = SeEcommercePromocao(ecommerce, temPromocao, cab.EndValidity);
+        u.PreencherNullDataInicioPromoEcommerce = ecommerce && temPromocao && cab.StartValidity is null;
+        u.PreencherNullDataFimPromoEcommerce = ecommerce && temPromocao && cab.EndValidity is null;
         u.AtualizarMargemMaximaEcommerce = ecommerce;
-        u.MargemVendaMaximoEcommerce = SeEcommerce(ecommerce, desconto);   // sem desconto no boletim, o UPDATE usa o CAL atual
+        u.MargemVendaMaximoEcommerce = SeEcommerce(ecommerce, desconto);
         u.DataAtualizacaoBoletimEcommerce = SeEcommerce(ecommerce, (DateTime?)agora);
         u.DataAlteracaoPrecoVendaEcommerce = SeEcommerce(ecommerce, (DateTime?)agora);
         u.DataUltimaAtualizacaoBoletim = agora;   // PRFI_DH_ULTATUBOLE
     }
 
     // ═════════ Fases 4.2 / 4.3 / 4.4: Farmácia Popular e produtos acordo (rodam depois da 4.1, sobre o valor que ela deixou) ═════════
-    // 4.2 Farmácia Popular - exclusão: PRECO1 e PRECO2 viram NULL (NULL de propósito, por isso usa LimparPreco1/2)
+    // 4.2 Farmácia Popular - exclusão: PRECO1 e PRECO2 viram NULL (NULL de propósito, por isso usa PreencherNullPreco1/2)
     private static void AplicarFarmaciaExclusao(ProdutoFilialAtualizacao u)
     {
         ApagarPreco1(u);
@@ -121,14 +125,14 @@ public static class ProdutoFilialAtualizacaoMapper
     // ═════════ PRECO1 / PRECO2: únicas colunas que podem receber NULL de propósito ═════════
 
     private static void GravarPreco1(ProdutoFilialAtualizacao u, decimal? valor)
-    { u.Preco1 = valor; u.LimparPreco1 = false; }
+    { u.Preco1 = valor; u.PreencherNullPreco1 = false; }
 
     private static void GravarPreco2(ProdutoFilialAtualizacao u, decimal? valor)
-    { u.Preco2 = valor; u.LimparPreco2 = false; }
+    { u.Preco2 = valor; u.PreencherNullPreco2 = false; }
 
     private static void ApagarPreco1(ProdutoFilialAtualizacao u)
-    { u.Preco1 = null; u.LimparPreco1 = true; }
+    { u.Preco1 = null; u.PreencherNullPreco1 = true; }
 
     private static void ApagarPreco2(ProdutoFilialAtualizacao u)
-    { u.Preco2 = null; u.LimparPreco2 = true; }
+    { u.Preco2 = null; u.PreencherNullPreco2 = true; }
 }

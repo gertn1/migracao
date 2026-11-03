@@ -59,44 +59,39 @@ public class BoletimRepository : IBoletimRepository
 
         return await c.QueryAsync<ProdutoFilial>(sql, new { filialId, boletimId, ids }, tx);
     }
-
-    // [MIGRAÇÃO DA PROCEDURE - FASE 4]: o ÚNICO UPDATE de PRODUTO_FILIAL (fases 4.1 a 4.4 juntas). Cada item do lote traz o valor novo
-    // de cada coluna, ou NULL para manter o atual: COALESCE(@novo, coluna) substitui o "ELSE pf.coluna" da procedure, então as colunas
-    // mantidas não precisam ser lidas antes. PRECO1 e PRECO2 são as únicas que podem ser limpas de propósito (@LimparPreco1/2).
-    // As margens PMC (ANT e margem máxima do e-commerce) dependem do CAL atual: o lado direito de um SET enxerga o valor ANTERIOR da
-    // linha, então o UPDATE usa PRFI_PR_MARGCALPMC direto, sem precisar lê-lo antes.
-    // Roda na mesma transação do service.
     public async Task<int> AtualizarProdutoFilialAsync(IDbConnection c, IDbTransaction? tx, IEnumerable<ProdutoFilialAtualizacao> lote)
     {
         const string sql = @"
-            UPDATE PRODUTO_FILIAL SET
-                PRFI_VL_PRECOVENDA =                   COALESCE(@PrecoVenda, PRFI_VL_PRECOVENDA),
-                PRFI_VL_PRECO1 =                       CASE WHEN @LimparPreco1 = 1 THEN NULL ELSE COALESCE(@Preco1, PRFI_VL_PRECO1) END,
-                PRFI_VL_PRECO2 =                       CASE WHEN @LimparPreco2 = 1 THEN NULL ELSE COALESCE(@Preco2, PRFI_VL_PRECO2) END,
-                PRFI_VL_PRECO3 =                       COALESCE(@Preco3, PRFI_VL_PRECO3),
-                PRFI_VL_PRECO6 =                       COALESCE(@Preco6, PRFI_VL_PRECO6),
-                PRFI_VL_PRECO9 =                       COALESCE(@Preco9, PRFI_VL_PRECO9),
-                PRFI_PR_MBEPRCVEN =                    COALESCE(@MbePrcVen, PRFI_PR_MBEPRCVEN),
-                PRFI_PR_MBEPRECO9 =                    COALESCE(@MbePreco9, PRFI_PR_MBEPRECO9),
-                MARGEM_VENDA_PRECIFICACAO =            COALESCE(@MargemVendaPrecificacao, MARGEM_VENDA_PRECIFICACAO),
-                PRFI_PR_MARGANTPMC =                   CASE WHEN @TrocarMargemPmc = 1 THEN COALESCE(PRFI_PR_MARGCALPMC, PRFI_PR_MARGANTPMC) ELSE PRFI_PR_MARGANTPMC END,
-                PRFI_PR_MARGCALPMC =                   COALESCE(@MargCalPmc, PRFI_PR_MARGCALPMC),
-                PRFI_VL_PRCPROM =                      COALESCE(@PrcProm, PRFI_VL_PRCPROM),
-                PRFI_DT_INIPRCPROM =                   COALESCE(@DtIniPrcProm, PRFI_DT_INIPRCPROM),
-                PRFI_DT_FIMPRCPROM =                   COALESCE(@DtFimPrcProm, PRFI_DT_FIMPRCPROM),
-                MARGEM_PROMOCAO_PRECIFICACAO =         COALESCE(@MargemPromocaoPrecificacao, MARGEM_PROMOCAO_PRECIFICACAO),
-                PRECO_VENDA_ECOMMERCE =                COALESCE(@PrecoVendaEcommerce, PRECO_VENDA_ECOMMERCE),
-                PRECO_PROMOCAO_ECOMMERCE =             COALESCE(@PrecoPromocaoEcommerce, PRECO_PROMOCAO_ECOMMERCE),
-                DATA_INICIO_PROMOCAO_ECOMMERCE =       COALESCE(@DataInicioPromoEcommerce, DATA_INICIO_PROMOCAO_ECOMMERCE),
-                DATA_FIM_PROMOCAO_ECOMMERCE =          COALESCE(@DataFimPromoEcommerce, DATA_FIM_PROMOCAO_ECOMMERCE),
-                MARGEM_VENDA_MAXIMO_ECOMMERCE =        CASE WHEN @AtualizarMargemMaximaEcommerce = 1 
-                    THEN COALESCE(@MargemVendaMaximoEcommerce, PRFI_PR_MARGCALPMC, MARGEM_VENDA_MAXIMO_ECOMMERCE) ELSE MARGEM_VENDA_MAXIMO_ECOMMERCE END,
-                DATA_ATUALIZACAO_BOLETIM_ECOMMERCE =   COALESCE(@DataAtualizacaoBoletimEcommerce, DATA_ATUALIZACAO_BOLETIM_ECOMMERCE),
-                DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = COALESCE(@DataAlteracaoPrecoVendaEcommerce, DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE),
-                ENCARTE_CLIENTE_SEMPRE =               COALESCE(@EncarteClienteSempre, ENCARTE_CLIENTE_SEMPRE),
-                PRFI_DH_ULTATUBOLE =                   COALESCE(@DataUltimaAtualizacaoBoletim, PRFI_DH_ULTATUBOLE),
-                PRFI_DT_ULTAPRCVEN =                   @DataUltimaAtualizacao
-            WHERE FILI_CD_FILIAL = @FilialId AND PRME_CD_PRODUTO = @ProdutoId";
+    UPDATE PRODUTO_FILIAL 
+    SET 
+        PRFI_VL_PRECOVENDA                   = CASE WHEN @PreencherNullPrecoVenda = 1 THEN NULL ELSE COALESCE(@PrecoVenda, PRFI_VL_PRECOVENDA) END,
+        PRFI_VL_PRECO1                       = CASE WHEN @PreencherNullPreco1 = 1 THEN NULL ELSE COALESCE(@Preco1, PRFI_VL_PRECO1) END,
+        PRFI_VL_PRECO2                       = CASE WHEN @PreencherNullPreco2 = 1 THEN NULL ELSE COALESCE(@Preco2, PRFI_VL_PRECO2) END,
+        PRFI_VL_PRECO3                       = COALESCE(@Preco3, PRFI_VL_PRECO3),
+        PRFI_VL_PRECO6                       = CASE WHEN @PreencherNullPreco6 = 1 THEN NULL ELSE COALESCE(@Preco6, PRFI_VL_PRECO6) END,
+        PRFI_VL_PRECO9                       = CASE WHEN @PreencherNullPreco9 = 1 THEN NULL ELSE COALESCE(@Preco9, PRFI_VL_PRECO9) END,
+        PRFI_PR_MBEPRCVEN                    = CASE WHEN @PreencherNullMbePrcVen = 1 THEN NULL ELSE COALESCE(@MbePrcVen, PRFI_PR_MBEPRCVEN) END,
+        PRFI_PR_MBEPRECO9                    = CASE WHEN @PreencherNullMbePreco9 = 1 THEN NULL ELSE COALESCE(@MbePreco9, PRFI_PR_MBEPRECO9) END,
+        MARGEM_VENDA_PRECIFICACAO            = COALESCE(@MargemVendaPrecificacao, MARGEM_VENDA_PRECIFICACAO),
+        PRFI_PR_MARGANTPMC                   = CASE WHEN @TrocarMargemPmc = 1 THEN COALESCE(PRFI_PR_MARGCALPMC, PRFI_PR_MARGANTPMC) ELSE PRFI_PR_MARGANTPMC END,
+        PRFI_PR_MARGCALPMC                   = COALESCE(@MargCalPmc, PRFI_PR_MARGCALPMC),
+        PRFI_VL_PRCPROM                      = COALESCE(@PrcProm, PRFI_VL_PRCPROM),
+        PRFI_DT_INIPRCPROM                   = COALESCE(@DtIniPrcProm, PRFI_DT_INIPRCPROM),
+        PRFI_DT_FIMPRCPROM                   = COALESCE(@DtFimPrcProm, PRFI_DT_FIMPRCPROM),
+        MARGEM_PROMOCAO_PRECIFICACAO         = COALESCE(@MargemPromocaoPrecificacao, MARGEM_PROMOCAO_PRECIFICACAO),
+        PRECO_VENDA_ECOMMERCE                = CASE WHEN @PreencherNullPrecoVendaEcommerce = 1 THEN NULL ELSE COALESCE(@PrecoVendaEcommerce, PRECO_VENDA_ECOMMERCE) END,
+        PRECO_PROMOCAO_ECOMMERCE             = COALESCE(@PrecoPromocaoEcommerce, PRECO_PROMOCAO_ECOMMERCE),
+        DATA_INICIO_PROMOCAO_ECOMMERCE       = COALESCE(@DataInicioPromoEcommerce, DATA_INICIO_PROMOCAO_ECOMMERCE),
+        DATA_FIM_PROMOCAO_ECOMMERCE          = COALESCE(@DataFimPromoEcommerce, DATA_FIM_PROMOCAO_ECOMMERCE),
+        MARGEM_VENDA_MAXIMO_ECOMMERCE        = CASE WHEN @AtualizarMargemMaximaEcommerce = 1 THEN COALESCE(@MargemVendaMaximoEcommerce, PRFI_PR_MARGCALPMC, MARGEM_VENDA_MAXIMO_ECOMMERCE) ELSE MARGEM_VENDA_MAXIMO_ECOMMERCE END,
+        DATA_ATUALIZACAO_BOLETIM_ECOMMERCE   = COALESCE(@DataAtualizacaoBoletimEcommerce, DATA_ATUALIZACAO_BOLETIM_ECOMMERCE),
+        DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE = COALESCE(@DataAlteracaoPrecoVendaEcommerce, DATA_ALTERACAO_PRECO_VENDA_ECOMMERCE),
+        ENCARTE_CLIENTE_SEMPRE               = COALESCE(@EncarteClienteSempre, ENCARTE_CLIENTE_SEMPRE),
+        PRFI_DH_ULTATUBOLE                   = COALESCE(@DataUltimaAtualizacaoBoletim, PRFI_DH_ULTATUBOLE),
+        PRFI_DT_ULTAPRCVEN                   = @DataUltimaAtualizacao
+    WHERE 
+        FILI_CD_FILIAL = @FilialId 
+        AND PRME_CD_PRODUTO = @ProdutoId;";
 
         var itens = lote.AsList();
         return itens.Count == 0 ? 0 : await c.ExecuteAsync(sql, itens, tx);

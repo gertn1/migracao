@@ -4,8 +4,8 @@ namespace PrecificacaoPoc.Domain;
 /// O que o boletim grava em um produto de PRODUTO_FILIAL (Fase 4 da procedure inteira: 4.1 a 4.4).
 /// Cada propriedade traz o valor NOVO da coluna, ou NULL quando a coluna deve ficar como está: o UPDATE faz
 /// COALESCE(@novo, coluna), então as colunas mantidas não precisam ser lidas antes.
-/// Exceção: PRECO1 e PRECO2 podem ser limpos (gravar NULL) por regra explícita da procedure (Farmácia Popular exclusão
-/// e acordo com preço 0); para isso existem LimparPreco1 / LimparPreco2.
+/// Exceção: algumas colunas podem receber NULL de propósito (a procedure atribui o valor mesmo NULL, ou limpa por regra explícita:
+/// Farmácia Popular exclusão e acordo com preço 0); para isso existem as flags PreencherNull... (PreencherNullPreco1/2/6/9 e as datas de promoção).
 /// Só dados: as regras ficam em ProdutoFilialAtualizacaoMapper; o repositório só grava.
 ///
 /// Propriedade -> coluna: PrecoVenda = PRFI_VL_PRECOVENDA, Preco1/2/3/6/9 = PRFI_VL_PRECO1/2/3/6/9, MbePrcVen = PRFI_PR_MBEPRCVEN,
@@ -43,9 +43,22 @@ public class ProdutoFilialAtualizacao
     public string? EncarteClienteSempre { get; set; }
     public DateTime? DataUltimaAtualizacaoBoletim { get; set; }  // só muda quando o boletim altera venda/promoção (Fase 4.1)
 
-    // NULL de propósito (regra explícita da procedure): true grava NULL na coluna, ignorando Preco1 / Preco2
-    public bool LimparPreco1 { get; set; }                       // Farmácia Popular exclusão / acordo com PRECO1 = 0
-    public bool LimparPreco2 { get; set; }                       // Farmácia Popular exclusão
+    // NULL de propósito (regra explícita da procedure): true grava NULL na coluna, ignorando o valor da propriedade correspondente
+    public bool PreencherNullPreco1 { get; set; }                       // Farmácia Popular exclusão / acordo com PRECO1 = 0
+    public bool PreencherNullPreco2 { get; set; }                       // Farmácia Popular exclusão
+
+    // Colunas que a procedure atribui direto quando a condição vale (CASE WHEN condição THEN b.coluna), mesmo que o valor seja NULL:
+    // true = a condição valeu e o valor novo é NULL, então a coluna vira NULL (sem a flag, o COALESCE manteria o valor atual)
+    public bool PreencherNullPrecoVenda { get; set; }                   // venda > 0 e PRECO_VENDA_CALC NULL
+    public bool PreencherNullMbePrcVen { get; set; }                    // venda > 0 e MBE_PRCVEN NULL
+    public bool PreencherNullMbePreco9 { get; set; }                    // venda > 0 e MARGEM_PRECO9 NULL
+    public bool PreencherNullPrecoVendaEcommerce { get; set; }          // e-commerce, venda > 0 e PRECO_VENDA_CALC NULL
+    public bool PreencherNullPreco6 { get; set; }                     // venda > 0 e BOPD_VL_PRCVENDA6 NULL
+    public bool PreencherNullPreco9 { get; set; }                       // venda > 0 e PRECO9_CALC NULL
+    public bool PreencherNullDtIniPrcProm { get; set; }                 // promoção > 0 e início de vigência do boletim NULL
+    public bool PreencherNullDtFimPrcProm { get; set; }                 // promoção > 0 e fim de vigência do boletim NULL
+    public bool PreencherNullDataInicioPromoEcommerce { get; set; }     // e-commerce, promoção > 0 e início de vigência NULL
+    public bool PreencherNullDataFimPromoEcommerce { get; set; }        // e-commerce, promoção > 0 e fim de vigência NULL
 
     // Margens PMC resolvidas no UPDATE, que enxerga o valor ANTERIOR da linha (por isso o CAL atual não precisa ser lido antes)
     public bool TrocarMargemPmc { get; set; }                    // true: o ANT passa a ser o CAL atual (ou o ANT atual, se o CAL for NULL)
