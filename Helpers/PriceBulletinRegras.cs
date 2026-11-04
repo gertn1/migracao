@@ -22,25 +22,25 @@ public static class PriceBulletinRegras
     public static bool AtualizaPrecoEcommerce(this PriceBulletinCab cab) => cab.UpdateEcommercePriceFlag == true; // ISNULL(ATUALIZAR_PRECO_ECOMMERCE, 0)
 
     // ───── Itens: valores já na precisão das colunas da #BoletimCalc ─────
-    public static decimal? PrecoVenda(this PriceBulletinDet d) => NaColuna(d.SalePrice, 2);                          // BOPD_VL_PRCVENDA
+    public static decimal? PrecoVenda(this PriceBulletinDet d) => ArredondarNumericOuNull(d.SalePrice, 2);                          // BOPD_VL_PRCVENDA
 
-    public static decimal? PrecoPromocional(this PriceBulletinDet d) => NaColuna(d.PromotionalPrice, 2);             // BOPD_VL_PRCPROM
+    public static decimal? PrecoPromocional(this PriceBulletinDet d) => ArredondarNumericOuNull(d.PromotionalPrice, 2);             // BOPD_VL_PRCPROM
 
-    public static decimal? PrecoFarmaciaPopularTotal(this PriceBulletinDet d) => NaColuna(d.TotalPopularPharmacyPrice, 2);   // BOPD_VL_PRCVENDA1
+    public static decimal? PrecoFarmaciaPopularTotal(this PriceBulletinDet d) => ArredondarNumericOuNull(d.TotalPopularPharmacyPrice, 2);   // BOPD_VL_PRCVENDA1
 
-    public static decimal? PrecoFarmaciaPopularParcial(this PriceBulletinDet d) => NaColuna(d.ParcialPopularPharmacyPrice, 2); // BOPD_VL_PRCVENDA2
+    public static decimal? PrecoFarmaciaPopularParcial(this PriceBulletinDet d) => ArredondarNumericOuNull(d.ParcialPopularPharmacyPrice, 2); // BOPD_VL_PRCVENDA2
 
-    public static decimal? PrecoSempre(this PriceBulletinDet d) => NaColuna(d.SemprePrice, 2);                       // BOPD_VL_PRCVENDA3
+    public static decimal? PrecoSempre(this PriceBulletinDet d) => ArredondarNumericOuNull(d.SemprePrice, 2);                       // BOPD_VL_PRCVENDA3
 
-    public static decimal? PrecoAnterior(this PriceBulletinDet d) => NaColuna(d.PreviousPrice, 2);                   // BOPD_VL_PRCVENDA6
+    public static decimal? PrecoAnterior(this PriceBulletinDet d) => ArredondarNumericOuNull(d.PreviousPrice, 2);                   // BOPD_VL_PRCVENDA6
 
-    public static decimal? MargemVenda(this PriceBulletinDet d) => NaColuna(d.SalePricingMargin, 4);                 // MARGEM_VENDA_PRECIFICACAO
+    public static decimal? MargemVenda(this PriceBulletinDet d) => ArredondarNumericOuNull(d.SalePricingMargin, 4);                 // MARGEM_VENDA_PRECIFICACAO
 
-    public static decimal? MargemPromocao(this PriceBulletinDet d) => NaColuna(d.PromotionPricingMargin, 4);         // MARGEM_PROMOCAO_PRECIFICACAO
+    public static decimal? MargemPromocao(this PriceBulletinDet d) => ArredondarNumericOuNull(d.PromotionPricingMargin, 4);         // MARGEM_PROMOCAO_PRECIFICACAO
 
-    public static decimal? DescontoEmbutido(this PriceBulletinDet d) => NaColuna(d.DiscountPercentage, 2);           // PERCENTUAL_DESCONTO_EMBUTIDO
+    public static decimal? DescontoEmbutido(this PriceBulletinDet d) => ArredondarNumericOuNull(d.DiscountPercentage, 2);           // PERCENTUAL_DESCONTO_EMBUTIDO
 
-    public static decimal? PrecoMaximo(this PriceBulletinDet d) => NaColuna(d.MaximumPrice, 2);                      // PRECO_MAXIMO_CONSUMIDOR
+    public static decimal? PrecoMaximo(this PriceBulletinDet d) => ArredondarNumericOuNull(d.MaximumPrice, 2);                      // PRECO_MAXIMO_CONSUMIDOR
 
     public static bool TemPrecoVenda(this PriceBulletinDet d) => d.PrecoVenda() is > 0;
 
@@ -55,7 +55,7 @@ public static class PriceBulletinRegras
             .SelectMany(g => g);
     }
 
-    private static decimal? NaColuna(decimal? valor, int casas) =>
+    private static decimal? ArredondarNumericOuNull(decimal? valor, int casas) =>
         valor is null ? null : ArredondarNumeric(valor.Value, casas);
 
     // CONVERT(NUMERIC(p,s), x) arredonda "metade para longe do zero"

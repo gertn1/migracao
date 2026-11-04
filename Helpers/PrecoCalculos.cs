@@ -22,9 +22,9 @@ public static class PrecoCalculos
         !cab.Profimetrics() && !cab.Demandtec() && cab.ProcessoGerador() != ProcessosBoletim.Manual;
 
     // PRECO_VENDA_CALC: dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1; senão o próprio valor normalizado. NULL sem venda > 0.
-    public static decimal? CalcularPrecoVenda(PriceBulletinCab cab, PriceBulletinDet det, bool politicaArredondamento)
+    public static decimal? CalcularPrecoVenda(PriceBulletinCab cab, PriceBulletinDet det, bool politicaArredondamento, bool temVenda)
     {
-        if (!det.TemPrecoVenda()) return null;
+        if (!temVenda) return null;
         var venda = det.PrecoVenda()!.Value;
         return DeveArredondar(cab) ? ArredondamentoPrecoVenda.Arredondar(venda, politicaArredondamento) : venda;
     }

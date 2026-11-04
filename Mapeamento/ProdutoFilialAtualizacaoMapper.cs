@@ -47,7 +47,7 @@ public static class ProdutoFilialAtualizacaoMapper
         bool ecommerce = cab.AtualizaPrecoEcommerce();       // ATUALIZAR_PRECO_ECOMMERCE = 1
         var desconto = det.DescontoEmbutido();
         var custo = ResolverCusto(tipoCusto, atual.PRFI_VL_UCG, atual.PRFI_VL_CMPG);
-        var precoVendaCalc = CalcularPrecoVenda(cab, det, politicaArredondamento);
+        var precoVendaCalc = CalcularPrecoVenda(cab, det, politicaArredondamento, temVenda);
         var preco9Calc = CalcularPreco9(det, atual);
         var mbePrcVen = temVenda ? CalcularMargemMbe(det.PrecoVenda(), custo) : (decimal?)null;
         var margemPreco9 = temVenda ? CalcularMargemPreco9(preco9Calc, custo) : (decimal?)null;
