@@ -13,7 +13,7 @@ public static class ProdutoFilialAtualizacaoMapper
     /// As fases rodam na ordem da procedure: 4.1, 4.2, 4.3, 4.4 (uma fase posterior sobrescreve o que a anterior definiu).
     /// </summary>
     public static ProdutoFilialAtualizacao? Mapear(PriceBulletinCab cab, PriceBulletinDet det, ProdutoFilial atual,
-        TipoCusto tipoCusto, int filialId, DateTime agora, Func<decimal, decimal> arredondarVenda)
+        TipoCusto tipoCusto, int filialId, DateTime agora, bool politicaArredondamento)
     {
         var processo = cab.ProcessoGerador();
         bool boletim = det.TemPrecoVenda() || det.TemPromocao();   // WHERE (venda > 0) OR (promoção > 0) do UPDATE gigante
@@ -31,7 +31,7 @@ public static class ProdutoFilialAtualizacaoMapper
             DataUltimaAtualizacao = agora
         };
 
-        if (boletim) AplicarBoletim(u, cab, det, atual, tipoCusto, agora, arredondarVenda);   // 4.1
+        if (boletim) AplicarBoletim(u, cab, det, atual, tipoCusto, agora, politicaArredondamento);   // 4.1
         if (exclusao) AplicarFarmaciaExclusao(u);                                             // 4.2
         if (alteracao) AplicarFarmaciaAlteracao(u, det);                                      // 4.3
         if (acordo) AplicarAcordo(u, cab, det);                                               // 4.4
@@ -40,14 +40,14 @@ public static class ProdutoFilialAtualizacaoMapper
     }
 
     private static void AplicarBoletim(ProdutoFilialAtualizacao u, PriceBulletinCab cab, PriceBulletinDet det, ProdutoFilial atual,
-        TipoCusto tipoCusto, DateTime agora, Func<decimal, decimal> arredondarVenda)
+        TipoCusto tipoCusto, DateTime agora, bool politicaArredondamento)
     {
         bool temVenda = det.TemPrecoVenda();                 // BOPD_VL_PRCVENDA > 0
         bool temPromocao = det.TemPromocao();                // BOPD_VL_PRCPROM > 0
         bool ecommerce = cab.AtualizaPrecoEcommerce();       // ATUALIZAR_PRECO_ECOMMERCE = 1
         var desconto = det.DescontoEmbutido();
         var custo = ResolverCusto(tipoCusto, atual.PRFI_VL_UCG, atual.PRFI_VL_CMPG);
-        var precoVendaCalc = CalcularPrecoVenda(cab, det, arredondarVenda);
+        var precoVendaCalc = CalcularPrecoVenda(cab, det, politicaArredondamento);
         var preco9Calc = CalcularPreco9(det, atual);
         var mbePrcVen = temVenda ? CalcularMargemMbe(det.PrecoVenda(), custo) : (decimal?)null;
         var margemPreco9 = temVenda ? CalcularMargemPreco9(preco9Calc, custo) : (decimal?)null;

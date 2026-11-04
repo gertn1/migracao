@@ -22,6 +22,14 @@ public class BoletimRepository : IBoletimRepository
         return valor?.FirstOrDefault();
     }
 
+    // Política de arredondamento da filial (lida pela fn_ARREDONDA_PRECO_VENDA_MONITORADO). Filial inexistente ou diferente de 'S' => false.
+    public async Task<bool> ObterPoliticaArredondamentoAsync(IDbConnection c, IDbTransaction? tx, int filialId)
+    {
+        const string sql = "SELECT POLITICA_ARREDONDAMENTO_PRECO_VENDA FROM FILIAL WITH (NOLOCK) WHERE FILI_CD_FILIAL = @filialId";
+        var politica = await c.QueryFirstOrDefaultAsync<string>(sql, new { filialId }, tx);
+        return politica?.Trim() == "S";
+    }
+
     // Estado de PRODUTO_FILIAL/PRODUTO_MESTRE dos produtos do boletim (os preços do boletim vêm do objeto em memória, não do banco).
     // Lê SÓ as colunas que entram no cálculo de algum valor novo; as demais o UPDATE mantém sozinho (COALESCE).
     // Só volta quem existe nas duas tabelas e não está em FUTURO_PRECO_DUPLICADO: é o INNER JOIN / NOT EXISTS da procedure.

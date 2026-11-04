@@ -8,7 +8,7 @@ using System.Data;
 namespace PrecificacaoPoc.Services;
 
 public class BoletimPrecoService(IDbConnectionFactory connectionFactory, IBoletimRepository repo,
-    IRegrasSempreGateway regrasSempre, IArredondadorPrecoVenda arredondador, ILogger<BoletimPrecoService> log)
+    IRegrasSempreGateway regrasSempre, ILogger<BoletimPrecoService> log)
 {
     public async Task<ResultadoProcessamento> ProcessarPorFilialAsync(int filialId, PriceBulletinCab cab, List<PriceBulletinDet> det, int usuarioId)
     {
@@ -52,14 +52,16 @@ public class BoletimPrecoService(IDbConnectionFactory connectionFactory, IBoleti
 
         // ═══[MIGRAÇÃO DA PROCEDURE - FASE 4]: Regras + cálculos (ProdutoFilialAtualizacao.Mapear) e aplicação em PRODUTO_FILIAL
         var agora = DateTime.Now;
-        Func<decimal, decimal> arredondar = preco => arredondador.Arredondar(preco, filialId);
+
+        // fn_ARREDONDA_PRECO_VENDA_MONITORADO: a política da filial é lida uma única vez
+        var politicaArredondamento = await repo.ObterPoliticaArredondamentoAsync(conn, null, filialId);
 
         var lote = new List<ProdutoFilialAtualizacao>();
 
         foreach (var item in itens)
         {
             var atual = produtoPorId[item.ProductId];
-            var atualizacao = ProdutoFilialAtualizacaoMapper.Mapear(cab, item, atual, tipoCusto, filialId, agora, arredondar);
+            var atualizacao = ProdutoFilialAtualizacaoMapper.Mapear(cab, item, atual, tipoCusto, filialId, agora, politicaArredondamento);
 
             if (atualizacao is not null)
                 lote.Add(atualizacao);
@@ -91,14 +93,14 @@ public class BoletimPrecoService(IDbConnectionFactory connectionFactory, IBoleti
         }
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Profimetrics), fora da transação principal
-        await ExecutarRegrasSempreAsync(conn, cab, filialId, itens, resultado);
+        await ExecutarRegrasSempreAsync(conn, cab, filialId, itens, politicaArredondamento, resultado);
 
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 6]: Retorno final sempre 0 (SET @numRetorno = 0), como na procedure
         return RetornoProcessamento.Sucesso;
     }
 
     private async Task ExecutarRegrasSempreAsync(
-        IDbConnection conn, PriceBulletinCab cab, int filialId, List<PriceBulletinDet> itens, ResultadoProcessamento resultado)
+        IDbConnection conn, PriceBulletinCab cab, int filialId, List<PriceBulletinDet> itens, bool politicaArredondamento, ResultadoProcessamento resultado)
     {
         // Filtro do cursor:WHERE ISNULL(PRECO_MAXIMO_CONSUMIDOR,0) > 0 AND ISNULL(BOPD_VL_PRCVENDA3,0) > 0
         var elegiveis = itens
@@ -110,7 +112,7 @@ public class BoletimPrecoService(IDbConnectionFactory connectionFactory, IBoleti
         {
             foreach (var item in elegiveis)
             {
-                decimal preco3 = arredondador.Arredondar(item.PrecoSempre()!.Value, filialId);
+                decimal preco3 = ArredondamentoPrecoVenda.Arredondar(item.PrecoSempre()!.Value, politicaArredondamento);
 
                 int retorno = await regrasSempre.AtualizarRegraProfimetricsAsync(
                     conn, null, item.ProductId, filialId, item.PrecoMaximo()!.Value, preco3);

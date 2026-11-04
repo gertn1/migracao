@@ -16,7 +16,6 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamin
 builder.Services.AddSingleton<IDbConnectionFactory, SqlConnectionFactory>();
 builder.Services.AddScoped<IBoletimRepository, BoletimRepository>();
 builder.Services.AddScoped<IRegrasSempreGateway, RegrasSempreGateway>();
-builder.Services.AddSingleton<IArredondadorPrecoVenda, ArredondadorPrecoVendaPoc>();
 builder.Services.AddScoped<BoletimPrecoService>();
 
 // APENAS TESTES / COMPARAÇÃO (não faz parte da procedure)

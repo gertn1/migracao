@@ -22,11 +22,11 @@ public static class PrecoCalculos
         !cab.Profimetrics() && !cab.Demandtec() && cab.ProcessoGerador() != ProcessosBoletim.Manual;
 
     // PRECO_VENDA_CALC: dbo.fn_ARREDONDA_PRECO_VENDA_MONITORADO quando FL_ARREDONDA = 1; senão o próprio valor normalizado. NULL sem venda > 0.
-    public static decimal? CalcularPrecoVenda(PriceBulletinCab cab, PriceBulletinDet det, Func<decimal, decimal> arredondarVenda)
+    public static decimal? CalcularPrecoVenda(PriceBulletinCab cab, PriceBulletinDet det, bool politicaArredondamento)
     {
         if (!det.TemPrecoVenda()) return null;
         var venda = det.PrecoVenda()!.Value;
-        return DeveArredondar(cab) ? arredondarVenda(venda) : venda;
+        return DeveArredondar(cab) ? ArredondamentoPrecoVenda.Arredondar(venda, politicaArredondamento) : venda;
     }
 
     // Preço 9 (+5% ou PMC). Equivale a CONVERT(NUMERIC(12,2), ROUND(<CASE>, 2, 2)) -> o 3º argumento "2" do ROUND SQL TRUNCA (não arredonda).
