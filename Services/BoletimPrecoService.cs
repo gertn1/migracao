@@ -92,34 +92,7 @@ public class BoletimPrecoService(IDbConnectionFactory connectionFactory, IBoleti
             return RetornoProcessamento.ErroAtualizacaoProdutoFilial;
         }
 
-        // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 5]: Orquestração das regras externas (Profimetrics), fora da transação principal
-        await ExecutarRegrasSempreAsync(conn, cab, filialId, itens, politicaArredondamento, resultado);
-
         // ═════════ [MIGRAÇÃO DA PROCEDURE - FASE 6]: Retorno final sempre 0 (SET @numRetorno = 0), como na procedure
         return RetornoProcessamento.Sucesso;
-    }
-
-    private async Task ExecutarRegrasSempreAsync(
-        IDbConnection conn, PriceBulletinCab cab, int filialId, List<PriceBulletinDet> itens, bool politicaArredondamento, ResultadoProcessamento resultado)
-    {
-        // Filtro do cursor:WHERE ISNULL(PRECO_MAXIMO_CONSUMIDOR,0) > 0 AND ISNULL(BOPD_VL_PRCVENDA3,0) > 0
-        var elegiveis = itens
-            .Where(i => i.PrecoMaximo() is > 0 && i.PrecoSempre() is > 0)
-            .ToList();
-
-        // [FASE 5.2] IF @regBOLETIM_PROFIMETRICS = 'S'
-        if (cab.Profimetrics())
-        {
-            foreach (var item in elegiveis)
-            {
-                decimal preco3 = ArredondamentoPrecoVenda.Arredondar(item.PrecoSempre()!.Value, politicaArredondamento);
-
-                int retorno = await regrasSempre.AtualizarRegraProfimetricsAsync(
-                    conn, null, item.ProductId, filialId, item.PrecoMaximo()!.Value, preco3);
-
-                if (retorno != 0) resultado.Observacoes.Add($"Profimetrics produto {item.ProductId}: retorno {retorno}");
-            }
-            resultado.Observacoes.Add($"Regras Profimetrics executadas para {elegiveis.Count} item(ns).");
-        }
     }
 }

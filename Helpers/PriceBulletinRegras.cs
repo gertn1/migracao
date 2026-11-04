@@ -40,8 +40,6 @@ public static class PriceBulletinRegras
 
     public static decimal? DescontoEmbutido(this PriceBulletinDet d) => ArredondarNumericOuNull(d.DiscountPercentage, 2);           // PERCENTUAL_DESCONTO_EMBUTIDO
 
-    public static decimal? PrecoMaximo(this PriceBulletinDet d) => ArredondarNumericOuNull(d.MaximumPrice, 2);                      // PRECO_MAXIMO_CONSUMIDOR
-
     public static bool TemPrecoVenda(this PriceBulletinDet d) => d.PrecoVenda() is > 0;
 
     public static bool TemPromocao(this PriceBulletinDet d) => d.PrecoPromocional() is > 0;
